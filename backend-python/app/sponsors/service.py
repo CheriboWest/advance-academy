@@ -20,6 +20,8 @@ LINK_TABLE = "company_sponsorship"
 CHECK_TABLE = "company_sponsorship_checks"
 IMPORTS_TABLE = "sponsor_register_imports"
 LICENCES_TABLE = "sponsor_licences"
+# PostgREST's per-response row cap.
+COMPANY_PAGE = 1000
 
 
 async def latest_register_import_id(
@@ -125,12 +127,23 @@ async def companies_needing_resolution(
         checks = await checks_for(client, rest, company_ids)
         pool = list(company_ids)
     else:
-        rows = await rest.select(
-            client,
-            "companies",
-            {"select": "id", "order": "created_at.desc", "limit": str(limit * 4)},
-        )
-        pool = [str(row["id"]) for row in rows]
+        # PostgREST caps a response at COMPANY_PAGE rows whatever `limit` says,
+        # so page with offset; `id` breaks created_at ties so pages don't overlap.
+        pool = []
+        while len(pool) < limit * 4:
+            rows = await rest.select(
+                client,
+                "companies",
+                {
+                    "select": "id",
+                    "order": "created_at.desc,id",
+                    "limit": str(min(COMPANY_PAGE, limit * 4 - len(pool))),
+                    "offset": str(len(pool)),
+                },
+            )
+            pool.extend(str(row["id"]) for row in rows)
+            if len(rows) < COMPANY_PAGE:
+                break
         checks = await checks_for(client, rest, pool) if pool else {}
 
     stale: list[str] = []

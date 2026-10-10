@@ -473,6 +473,26 @@ check("BUDGET: a failure that never reached the model costs no budget",
       rest3.checks[0]["attempts"] == 0, f"got {rest3.checks[0]['attempts']}")
 check("BUDGET: and the model really was not called", stub.calls == 0)
 
+# PostgREST returns at most 1000 rows per request whatever `limit` asks for;
+# the backfill must page past that or it only ever sees the newest 1000.
+class CappedRest(FakeRest):
+    async def select(self, client, table, params=None, timeout=None):
+        if table == "companies" and "id" not in (params or {}):
+            start = int(params.get("offset", "0"))
+            end = start + min(int(params.get("limit", "1000")), 1000)
+            return [{"id": c["id"]} for c in self.companies[start:end]]
+        return await super().select(client, table, params)
+
+
+from app.sponsors.service import companies_needing_resolution  # noqa: E402
+
+capped = CappedRest([company(f"co-p{i}") for i in range(2500)])
+pending = asyncio.run(
+    companies_needing_resolution(None, capped, limit=8000, current_import="import-1")
+)
+check("PAGING: every unchecked company past the 1000-row cap is found",
+      len(pending) == 2500 and len(set(pending)) == 2500, f"got {len(pending)}")
+
 print()
 if _failures:
     print(f"{len(_failures)} FAILED:")
