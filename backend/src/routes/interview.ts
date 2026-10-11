@@ -55,7 +55,7 @@ export async function registerInterviewRoutes(app: FastifyInstance) {
         return session;
       }
       if (body?.action === 'message') {
-        return await sendInterviewMessage(body as SendMessageBody);
+        return await sendInterviewMessage(body as SendMessageBody, request.userId);
       }
       return reply.code(400).send({ error: 'Unknown action' });
     } catch (error) {
@@ -76,7 +76,7 @@ export async function registerInterviewRoutes(app: FastifyInstance) {
 
   app.post<{ Body: EvaluateSessionBody }>('/api/evaluate', async (request, reply) => {
     try {
-      const evaluation = await evaluateInterview(request.body);
+      const evaluation = await evaluateInterview(request.body, request.userId);
       // The feedback report is the session's finished output — store it so the
       // user can reread it from History without re-running the evaluation.
       // Best-effort: a failed write never fails the evaluation.
@@ -131,7 +131,7 @@ export async function registerInterviewRoutes(app: FastifyInstance) {
   });
 
   app.get<{ Params: { id: string } }>('/api/interview/sessions/:id', async (request, reply) => {
-    const session = await dbGetSession(request.params.id);
+    const session = await dbGetSession(request.params.id, request.userId);
     if (!session) {
       return reply.code(404).send({ error: 'Session not found' });
     }
