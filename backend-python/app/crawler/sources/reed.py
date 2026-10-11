@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
@@ -31,6 +31,24 @@ def _parse_date(value: Optional[str]) -> Optional[str]:
         return datetime.strptime(value, "%d/%m/%Y").date().isoformat()
     except ValueError:
         return None
+
+
+def _parse_expiry(value: Optional[str]) -> Optional[str]:
+    """Reed's `expirationDate` ("13/08/2026") as the moment the job closes.
+
+    Reed gives a day, not a time, and the vacancy is open for all of it, so this
+    is midnight UTC at the START of the next day. That is never earlier than
+    the end of the day in London (exactly it in GMT, an hour after it in BST),
+    so a job is never closed while Reed still lists it as open. Missing or
+    unreadable → None, which means "no stated date", never "expired".
+    """
+    if not value:
+        return None
+    try:
+        day = datetime.strptime(value.strip(), "%d/%m/%Y")
+    except ValueError:
+        return None
+    return (day.replace(tzinfo=timezone.utc) + timedelta(days=1)).isoformat()
 
 
 async def fetch(
@@ -74,6 +92,7 @@ async def fetch(
                 salary_max=_to_int(result.get("maximumSalary")),
                 source_url=result.get("jobUrl"),
                 posted_at=_parse_date(result.get("date")),
+                expires_at=_parse_expiry(result.get("expirationDate")),
             )
         )
     return jobs

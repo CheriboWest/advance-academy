@@ -116,6 +116,21 @@ class FakeRest:
         # scenario remembered to exclude. Pass LIVE_CRAWL_RUNS_COLUMNS to hold
         # `_finalize` to the live database.
         self.known_columns = known_columns
+        # --- job expiry (migration 046) ---------------------------------
+        # Every upsert request as sent: (table, on_conflict, rows). Lets a
+        # scenario check which columns each request named.
+        self.upsert_calls: list[tuple[str, str, list[dict]]] = []
+        # job_sightings, keyed by its primary key.
+        self.sightings: dict[tuple[str, str, str, str], dict] = {}
+        # Rows inserted per table (crawl_fetches, ...).
+        self.inserted: dict[str, list[dict]] = {}
+        self.rpc_calls: list[tuple[str, Optional[dict]]] = []
+        self.rpc_results: dict[str, object] = {}
+        # Simulated failures.
+        self.missing_job_columns: set[str] = set()  # pre-046 jobs table
+        self.fail_upsert_tables: set[str] = set()
+        self.fail_insert_tables: set[str] = set()
+        self.rpc_error: Optional[Exception] = None
 
     async def select(self, client, table, params=None):
         params = params or {}
@@ -125,18 +140,42 @@ class FakeRest:
         if table == "jobs":
             if "content_hash" in params:
                 wanted = _in_list(params["content_hash"])
-                return [{"content_hash": h}
-                        for h in {j.get("content_hash") for j in self.jobs}
-                        if h in wanted]
+                columns = (params.get("select") or "content_hash").split(",")
+                unknown = [c for c in columns if c in self.missing_job_columns]
+                if unknown:
+                    raise _postgrest_error(
+                        "GET", "jobs", "42703",
+                        f"column jobs.{unknown[0]} does not exist",
+                    )
+                by_hash = {j.get("content_hash"): j for j in self.jobs}
+                return [{c: by_hash[h].get(c) for c in columns}
+                        for h in by_hash if h in wanted]
             wanted = _in_list(params.get("company_id", ""))
             return [j for j in self.jobs
                     if j.get("company_id") in wanted and j.get("is_active")]
         return []
 
     async def insert(self, client, table, rows, prefer="return=representation"):
+        if table in self.fail_insert_tables:
+            raise _postgrest_error("POST", table, "500", "insert failed")
+        self.inserted.setdefault(table, []).extend(dict(r) for r in rows)
         return rows
 
+    async def rpc(self, client, function, payload=None, timeout=None):
+        self.rpc_calls.append((function, payload))
+        if self.rpc_error is not None:
+            raise self.rpc_error
+        return self.rpc_results.get(function)
+
     async def upsert(self, client, table, rows, on_conflict, prefer=""):
+        self.upsert_calls.append((table, on_conflict, [dict(r) for r in rows]))
+        if table in self.fail_upsert_tables:
+            raise _postgrest_error("POST", table, "500", "upsert failed")
+        if table == "job_sightings":
+            for row in rows:
+                key = (row["content_hash"], row["source"], row["query"], row["location"])
+                self.sightings.setdefault(key, {}).update(row)
+            return []
         if table == "companies":
             out = []
             for row in rows:
@@ -197,6 +236,16 @@ class FakeRest:
 
             run_id = match.get("id", "").removeprefix("eq.")
             self.crawl_runs.setdefault(run_id, {"id": run_id}).update(values)
+
+
+def _postgrest_error(method: str, table: str, code: str, message: str) -> httpx.HTTPStatusError:
+    request = httpx.Request(method, f"https://example.test/{table}")
+    response = httpx.Response(
+        400 if code != "500" else 500,
+        json={"code": code, "message": message},
+        request=request,
+    )
+    return httpx.HTTPStatusError(message, request=request, response=response)
 
 
 def _in_list(raw: str) -> set[str]:
@@ -268,3 +317,87 @@ def run_crawl_with(
 
 def crawl_run_updates(rest: FakeRest) -> list[dict]:
     return [values for table, _, values in rest.updates if table == "crawl_runs"]
+
+
+def job(
+    title: str,
+    company: str = "Acme",
+    source: str = "adzuna",
+    expires_at: Optional[str] = None,
+    city: str = "London",
+) -> NormalizedJob:
+    """A NormalizedJob as a source adapter would return it."""
+    return NormalizedJob(
+        source=source,
+        source_job_id=f"{source}:{company}:{title}",
+        company_name=company,
+        title=title,
+        city=city,
+        location_raw=city,
+        posted_at=(NOW - timedelta(days=3)).isoformat(),
+        expires_at=expires_at,
+    )
+
+
+def run_crawl_with_sources(
+    rest: FakeRest,
+    *,
+    adzuna=(),
+    reed=(),
+    run_id: str = "run-1",
+    query: str = "Software Engineer",
+    city: str = "London",
+    sources: tuple[str, ...] = ("adzuna", "reed"),
+    settings: Optional[object] = None,
+    timeout_seconds: Optional[float] = None,
+) -> None:
+    """Drive the real `run_crawl` — real `_fetch_all` / `_fetch_source`, so the
+    per-pair fetch outcomes are produced the way production produces them — with
+    only the two source adapters stubbed.
+
+    `adzuna` / `reed` are each a list of NormalizedJob, an Exception to raise,
+    or a callable (query, city) -> list | Exception | awaitable, for per-pair
+    behaviour in multi-pair runs.
+    """
+    import asyncio
+    import inspect
+
+    from app.crawler.sources import adzuna as adzuna_mod
+    from app.crawler.sources import reed as reed_mod
+
+    def _stub(spec):
+        async def fetch(client, *args, **kwargs):
+            # adzuna.fetch(client, app_id, app_key, query, city, limit)
+            # reed.fetch(client, api_key, query, city, limit)
+            query_arg, city_arg = args[-2], args[-1]
+            outcome = spec(query_arg, city_arg) if callable(spec) else spec
+            if inspect.isawaitable(outcome):
+                outcome = await outcome
+            if isinstance(outcome, Exception):
+                raise outcome
+            return list(outcome)
+        return fetch
+
+    async def _offline(company_ids):  # post-crawl hooks: not under test here
+        return None
+
+    originals = (pipeline.get_settings, pipeline.SupabaseRest,
+                 adzuna_mod.fetch, reed_mod.fetch, pipeline.OVERALL_TIMEOUT_SECONDS,
+                 pipeline._resolve_sponsorship, pipeline._generate_company_summaries,
+                 pipeline._classify_sectors)
+    pipeline._resolve_sponsorship = _offline  # type: ignore[assignment]
+    pipeline._generate_company_summaries = _offline  # type: ignore[assignment]
+    pipeline._classify_sectors = _offline  # type: ignore[assignment]
+    pipeline.get_settings = lambda: settings or FakeSettings()  # type: ignore[assignment]
+    pipeline.SupabaseRest = lambda *a, **k: rest  # type: ignore[assignment]
+    adzuna_mod.fetch = _stub(adzuna)  # type: ignore[assignment]
+    reed_mod.fetch = _stub(reed)  # type: ignore[assignment]
+    if timeout_seconds is not None:
+        pipeline.OVERALL_TIMEOUT_SECONDS = timeout_seconds  # type: ignore[assignment]
+    try:
+        asyncio.run(pipeline.run_crawl(run_id, query, city, list(sources), True))
+    finally:
+        (pipeline.get_settings, pipeline.SupabaseRest,
+         adzuna_mod.fetch, reed_mod.fetch, pipeline.OVERALL_TIMEOUT_SECONDS,
+         pipeline._resolve_sponsorship, pipeline._generate_company_summaries,
+         pipeline._classify_sectors) = originals  # type: ignore[assignment]
