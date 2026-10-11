@@ -11,6 +11,7 @@
     "./cover-letter": "./src/cover-letter.ts",
     "./cv-optimizer": "./src/cv-optimizer.ts",
     "./engagement": "./src/engagement.ts",
+    "./gamification": "./src/gamification.ts",
     "./job-tracking": "./src/job-tracking.ts",
     "./jobs": "./src/jobs.ts",
     "./leads": "./src/leads.ts"

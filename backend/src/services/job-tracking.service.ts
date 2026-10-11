@@ -7,6 +7,8 @@ import type {
 } from '@advance-academy/contracts/job-tracking';
 import { getSupabase } from '../lib/supabase.js';
 import { jobUrlKey, type ValidCreate } from '../lib/job-tracking.js';
+import { isGamificationV2Enabled } from '../config/features.js';
+import { mapGamificationDbError } from '../lib/gamification-errors.js';
 
 /**
  * Individual Job Tracking (AI Job Tools 1.3, migration 023).
@@ -178,25 +180,30 @@ export async function createSavedJob(userId: string, input: ValidCreate): Promis
     if (existing) throw new JobAlreadySavedError(existing);
   }
 
-  const { data, error } = await getSupabase()
-    .from('saved_jobs')
-    .insert({
-      user_id: userId,
-      source: input.source ?? 'manual',
-      title: input.title,
-      company_name: input.companyName ?? null,
-      location: input.location ?? null,
-      job_url: input.jobUrl ?? null,
-      url_key: urlKey,
-      description: input.description ?? null,
-      salary_text: input.salaryText ?? null,
-      sponsor_visa: input.sponsorVisa ?? null,
-      deadline_at: input.deadlineAt ?? null,
-      next_follow_up_at: input.nextFollowUpAt ?? null,
-      notes: input.notes ?? null,
-    })
-    .select(JOB_COLUMNS)
-    .single();
+  const card = {
+    source: input.source ?? 'manual',
+    title: input.title,
+    company_name: input.companyName ?? null,
+    location: input.location ?? null,
+    job_url: input.jobUrl ?? null,
+    url_key: urlKey,
+    description: input.description ?? null,
+    salary_text: input.salaryText ?? null,
+    sponsor_visa: input.sponsorVisa ?? null,
+    deadline_at: input.deadlineAt ?? null,
+    next_follow_up_at: input.nextFollowUpAt ?? null,
+    notes: input.notes ?? null,
+  };
+
+  // Gamification v2: the card and its first event in one transaction (047's
+  // create_saved_job), so the save is never captured without its event.
+  const { data, error } = isGamificationV2Enabled()
+    ? await getSupabase().rpc('create_saved_job', { p_user: userId, p_card: card }).single()
+    : await getSupabase()
+        .from('saved_jobs')
+        .insert({ user_id: userId, ...card })
+        .select(JOB_COLUMNS)
+        .single();
 
   if (error) {
     // Two saves raced past the pre-check; the unique index caught the second.
@@ -208,7 +215,7 @@ export async function createSavedJob(userId: string, input: ValidCreate): Promis
   }
 
   const job = toJob(data as unknown as SavedJobRow);
-  await appendEvent(userId, job.id, null, job.status, null);
+  if (!isGamificationV2Enabled()) await appendEvent(userId, job.id, null, job.status, null);
   return job;
 }
 
@@ -281,6 +288,8 @@ export async function changeJobStatus(
   jobId: string,
   input: ChangeJobStatusRequest,
 ): Promise<SavedJob | null> {
+  if (isGamificationV2Enabled()) return changeJobStatusV2(userId, jobId, input);
+
   const current = await fetchJob(userId, jobId);
   if (!current) return null;
   if (current.status === input.status) return current;
@@ -305,6 +314,25 @@ export async function changeJobStatus(
 
   await appendEvent(userId, jobId, current.status, input.status, input.note ?? null);
   return toJob(data as unknown as SavedJobRow);
+}
+
+/**
+ * The same move through 047's change_job_status: card update and event in one
+ * transaction, the card row-locked so two clicks can't log two events. It
+ * returns NULL for a card that isn't this user's — PostgREST may render that as
+ * null or as a row of nulls, so both read as "not found".
+ */
+async function changeJobStatusV2(
+  userId: string,
+  jobId: string,
+  input: ChangeJobStatusRequest,
+): Promise<SavedJob | null> {
+  const { data, error } = await getSupabase()
+    .rpc('change_job_status', { p_user: userId, p_job: jobId, p_status: input.status, p_note: input.note ?? null })
+    .maybeSingle();
+  if (error) throw mapGamificationDbError(error, 'change job status');
+  const row = data as SavedJobRow | null;
+  return row?.id ? toJob(row) : null;
 }
 
 /** True when a row was deleted; false when there was nothing of this user's to delete. */

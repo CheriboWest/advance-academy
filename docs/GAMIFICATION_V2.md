@@ -137,6 +137,72 @@ functions:
 
 A superuser migration owner gets neither.
 
+## Backend and frontend (`GAMIFICATION_V2_ENABLED`)
+
+The flag is read by `isGamificationV2Enabled()` in `backend/src/config/features.ts`
+and is off unless set to exactly `true`.
+
+With the flag **on**:
+
+- **Job tracking** (`services/job-tracking.service.ts`) creates cards and changes
+  status through `create_saved_job` / `change_job_status`. The card, its event
+  and the captured intents commit together. Edits through `PATCH`, including a
+  changed link, still update the row directly; the capture trigger handles a
+  new URL.
+- **CV Optimizer** writes `cv_analysis_jobs.saved_job_id` when the run is
+  created. A card id that isn't the caller's falls back to an unlinked run (G1),
+  as before.
+- **Cover Letter** charges and writes back in one transaction:
+  - `record_cover_letter` for a tracked job, `charge_credits` otherwise;
+  - the call goes through `spendCreditsWith` in `lib/credits.ts`, which prices
+    it (0 for admins) and pays the referral on first use;
+  - the route then skips `spendCredits`.
+  
+  Losing the race for the last credit is a 429 `CREDIT_EXHAUSTED`, and nothing
+  is written.
+- **`GET /api/engagement`** no longer writes `points_ledger`. Its points stay as
+  history.
+- **New routes** (`routes/gamification.ts`, all per-user, 60/min):
+
+  | Route | Does |
+  |---|---|
+  | `GET /api/gamification` | Assigns today's quests, judges pending intents, returns the summary |
+  | `PATCH /api/gamification/goals` | Updates goals and timezone |
+  | `POST /api/gamification/rest-days` | Books a rest day |
+  | `POST /api/gamification/achievements/seen` | Marks achievements seen |
+  | `GET /api/gamification/coins` | Returns coin history |
+  | `GET /api/admin/gamification/stuck` | Lists stuck intents (admin) |
+  | `POST /api/admin/gamification/intents/:seq/skip` | Skips a stuck intent (admin) |
+
+With the flag **off**:
+
+- `GET /api/gamification` answers `{ enabled: false }`, and the other routes
+  return 404.
+- Everything else behaves exactly as before.
+- 047's triggers still capture intents from the ordinary writes, so nothing is
+  lost before the flag goes on.
+
+**Frontend.** The home page renders `ProgressPanel`
+(`features/gamification/components/`):
+
+- the v2 panel when the summary says `enabled`;
+- otherwise the existing weekly-tasks `ThisWeek`.
+
+`/jobs` gains a one-line streak/XP strip only when v2 is on. Job-tracking
+mutations invalidate the `['gamification']` query.
+
+The Next.js proxies are in `app/api/gamification/`. There is no admin UI yet for
+stuck intents; the admin routes are API-only.
+
+**Interview ownership (not behind the flag).**
+
+- `/api/interview` (message) and `/api/evaluate` now check that `dbSessionId` is
+  the caller's before writing.
+- `GET /api/interview/sessions/:id` is scoped to the caller.
+
+Previously any student who knew a session id could write into, complete or read
+someone else's mock.
+
 ## Errors the backend maps
 
 | Code | Meaning | HTTP |
@@ -199,3 +265,15 @@ PGHOST=127.0.0.1 PGPORT=54340 supabase/tests/run_local.sh
 
 To check the superuser path too, run with `MIGRATION_ROLE=supabase_admin`.
 Roles are cluster-wide, so use a fresh cluster for that run.
+
+The backend's own checks:
+
+- `backend/src/lib/gamification.test.ts` runs with `npm run test --workspace
+  backend`.
+- `backend/src/services/gamification.integration.test.ts` drives the real
+  services through supabase-js and PostgREST against that scratch database. It
+  is skipped unless both `GAMIFICATION_IT_SUPABASE_URL` (a local URL serving
+  `/rest/v1`, e.g. `supabase start`) and `GAMIFICATION_IT_SERVICE_KEY` are set.
+
+The frontend panel is covered by
+`features/gamification/components/progress-panel.test.tsx` (`npm test`).

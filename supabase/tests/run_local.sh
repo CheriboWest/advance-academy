@@ -34,7 +34,7 @@ su_psql=(psql -X -q -v ON_ERROR_STOP=1 -U "$PG_SUPERUSER")
 owner_psql=(env PGOPTIONS="-c client_min_messages=warning" psql -X -q -v ON_ERROR_STOP=1 -U "$MIGRATION_ROLE" -d "$SCRATCH_DB")
 
 PGOPTIONS="-c client_min_messages=warning" "${su_psql[@]}" -d postgres -f "$here/support/supabase_roles.sql" >/dev/null
-"${su_psql[@]}" -d postgres -c "drop database if exists $SCRATCH_DB" -c "create database $SCRATCH_DB owner $MIGRATION_ROLE" >/dev/null
+"${su_psql[@]}" -d postgres -c "drop database if exists $SCRATCH_DB with (force)" -c "create database $SCRATCH_DB owner $MIGRATION_ROLE" >/dev/null
 "${su_psql[@]}" -d "$SCRATCH_DB" -f "$here/support/supabase_database.sql" >/dev/null
 
 applied=0

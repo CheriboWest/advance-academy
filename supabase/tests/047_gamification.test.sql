@@ -946,6 +946,10 @@ begin
            || (select count(*) from public.saved_jobs where user_id = %1$L and cover_letter_run_id is not null) || '/'
            || (select count(*) from public.reward_intents where user_id = %1$L and kind = 'cover_letter') || '/'
            || (select count(*) from public.job_events where user_id = %1$L and to_status = 'preparing')$q$, pg_temp.id('X')), '5/0/0/0');
+  perform pg_temp.expect('D12 a free charge (cost 0, as for admins) changes nothing', 'service_role', format(
+    $q$select public.charge_credits(%L, 0)$q$, pg_temp.id('X')), '5');
+  perform pg_temp.expect('D12 …and does not count as a first tool use', null, format(
+    $q$select (first_tool_used_at is null)::text from public.users where id = %L$q$, pg_temp.id('X')), 'true');
   perform pg_temp.expect('D12 charge_credits for a letter with no card: 5 → 4', 'service_role', format(
     $q$select public.charge_credits(%L, 1)$q$, pg_temp.id('X')), '4');
   perform pg_temp.expect('D12 …and first_tool_used_at is set', null, format(

@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { OrnamentalDivider } from '@/components/ornamental-divider'
-import { ThisWeek } from '@/features/engagement/components/this-week'
+import { ProgressPanel } from '@/features/gamification/components/progress-panel'
 import { TOOL_GROUPS } from '@/shared/config/navigation'
 import type { NavItem, ViewName } from '@/shared/types/navigation'
 
@@ -46,7 +46,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
     <>
       {/* The dashboard part: what to do this week. The tool grid below is the map. */}
       <div className="mx-auto max-w-7xl px-4 pt-8 sm:px-6 lg:px-8">
-        <ThisWeek />
+        <ProgressPanel />
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 md:py-24 lg:px-8">

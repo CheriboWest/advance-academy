@@ -632,8 +632,10 @@ begin
   if v_bal < p_cost then
     raise exception 'CREDIT_EXHAUSTED' using errcode = 'GC001', detail = pg_catalog.format('balance %s, cost %s', v_bal, p_cost);
   end if;
+  -- A free run (admins: the backend passes 0) is not a first paid tool use.
   update public.users u set credit_balance = u.credit_balance - p_cost,
-         first_tool_used_at = coalesce(u.first_tool_used_at, pg_catalog.now())
+         first_tool_used_at = case when p_cost > 0 then coalesce(u.first_tool_used_at, pg_catalog.now())
+                                   else u.first_tool_used_at end
    where u.id = p_user;
   get diagnostics n = row_count;
   if n <> 1 then raise exception 'GAM_INVARIANT: credit update affected % rows', n using errcode = 'GX002'; end if;

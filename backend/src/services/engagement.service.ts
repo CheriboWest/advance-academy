@@ -1,5 +1,6 @@
 import type { EngagementResponse, EngagementTask } from '@advance-academy/contracts/engagement';
 import { getSupabase } from '../lib/supabase.js';
+import { isGamificationV2Enabled } from '../config/features.js';
 import { addDays, taskProgress, utcDay, weekStartUtc, type WeekCounts } from '../lib/engagement.js';
 
 /**
@@ -78,7 +79,11 @@ export async function getEngagement(userId: string, now = new Date()): Promise<E
     weekCounts(userId, lastWeek, thisWeek),
   ]);
   const tasks = taskProgress(current);
-  await Promise.all([award(userId, thisWeek, tasks), award(userId, lastWeek, taskProgress(previous))]);
+  // Gamification v2 never awards on read: the points ledger stays as history,
+  // and new rewards come only from 047's processor.
+  if (!isGamificationV2Enabled()) {
+    await Promise.all([award(userId, thisWeek, tasks), award(userId, lastWeek, taskProgress(previous))]);
+  }
 
   const sb = getSupabase();
   const [ledger, user] = await Promise.all([

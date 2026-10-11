@@ -31,6 +31,7 @@ import { registerCoachingRoutes } from './routes/coaching.js';
 import { registerJobTrackingRoutes } from './routes/job-tracking.js';
 import { registerCoverLetterRoutes } from './routes/cover-letter.js';
 import { registerEngagementRoutes } from './routes/engagement.js';
+import { registerGamificationRoutes } from './routes/gamification.js';
 import { registerCompanyContactsRoutes } from './routes/company-contacts.js';
 import { startEngagementReminders } from './lib/engagement-reminder.js';
 
@@ -134,6 +135,7 @@ async function bootstrap() {
   await registerJobTrackingRoutes(app);
   await registerCoverLetterRoutes(app);
   await registerEngagementRoutes(app);
+  await registerGamificationRoutes(app);
   await registerCompanyContactsRoutes(app);
 
   await app.listen({
