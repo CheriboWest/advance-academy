@@ -42,6 +42,15 @@ Nothing here has been cut over.
   `ADZUNA_APP_KEY`, `REED_API_KEY`) as an in-process FastAPI background task,
   writing `crawl_runs` / `discovery_queries` / `companies` / `jobs`. A restart
   mid-run kills it ("The crawl was interrupted").
+- **Job expiry** (migration 046, `docs/JOB_EXPIRY.md`): `jobs.is_active` is the
+  only switch every student query, the view and RLS read, so closing a job means
+  setting it false with a `closed_reason`. `expired` = Reed's stated
+  `expires_at` has passed (`close_expired_jobs()`, run after every crawl);
+  `stale` = successful crawls stopped returning it (`close_stale_jobs()`, a dry
+  run by default and refused until coverage is complete). The crawler upserts
+  jobs **one request per column set** — PostgREST rejects mixed keys, and a
+  source without a date must never null Reed's. `crawl_fetches` rows are written
+  only for fully successful pairs; never relax that.
 - `/coach/*` additionally requires `users.is_admin` — checked in
   `app/coach/(workspace)/layout.tsx` and, for the Python API, in
   `backend-python/app/auth.py`. There is no separate `is_coach` column: coach

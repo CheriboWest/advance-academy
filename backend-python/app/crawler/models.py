@@ -21,6 +21,10 @@ class NormalizedJob:
     posted_at: Optional[str] = None  # ISO 8601
     location_raw: Optional[str] = None
     website: Optional[str] = None
+    # When the source says the vacancy closes (ISO 8601, UTC). Only Reed
+    # states one; Adzuna's search API has no closing date, so it stays None and
+    # the pipeline never lets a None overwrite a date already stored.
+    expires_at: Optional[str] = None
 
 
 def compute_display_stats(
@@ -105,6 +109,20 @@ class CrawlStats:
     # source). Keyed by source name ("adzuna", "reed"); see
     # `record_source_outcome`.
     per_source: dict[str, dict[str, int]] = field(default_factory=dict)
+    # The (query, city) pair currently being crawled — reset by `begin_pair`,
+    # never persisted. They decide whether this pair's fetches may be recorded
+    # in `crawl_fetches`, the evidence the stale-job sweep relies on:
+    #   pair_fetches   source -> results it returned; None = it failed or
+    #                  was requested but not configured.
+    #   pair_complete  False once anything means not every returned job was
+    #                  stored and sighted (a dropped job, a failed sightings
+    #                  write, migration 046 not applied).
+    pair_fetches: dict[str, Optional[int]] = field(default_factory=dict)
+    pair_complete: bool = True
+
+    def begin_pair(self) -> None:
+        self.pair_fetches = {}
+        self.pair_complete = True
 
     def record_source_outcome(
         self,
