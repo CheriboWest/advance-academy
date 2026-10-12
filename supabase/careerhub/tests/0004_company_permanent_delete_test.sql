@@ -1,13 +1,13 @@
 -- Self-check for migration 0004 (permanent company deletion).
 --
--- Runs against a throwaway database built from `infra/supabase/schema.sql` +
+-- Runs against a throwaway database built from `supabase/careerhub/schema.sql` +
 -- the migrations. It asserts with `raise exception`, so psql must be run with
 -- ON_ERROR_STOP=1: any failed assertion aborts the run.
 --
 --   createdb ch_test
---   psql -v ON_ERROR_STOP=1 -d ch_test -f infra/supabase/schema.sql
---   psql -v ON_ERROR_STOP=1 -d ch_test -f infra/supabase/migrations/0004_company_permanent_delete.sql
---   psql -v ON_ERROR_STOP=1 -d ch_test -f infra/supabase/tests/0004_company_permanent_delete_test.sql
+--   psql -v ON_ERROR_STOP=1 -d ch_test -f supabase/careerhub/schema.sql
+--   psql -v ON_ERROR_STOP=1 -d ch_test -f supabase/migrations/027_ch0004_company_permanent_delete.sql
+--   psql -v ON_ERROR_STOP=1 -d ch_test -f supabase/careerhub/tests/0004_company_permanent_delete_test.sql
 
 \set ON_ERROR_STOP on
 \pset pager off

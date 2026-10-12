@@ -15,7 +15,7 @@ Covers the seven behaviours the workflow depends on:
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
+from typing import Optional
 
 from app.crawler.models import CrawlStats
 from app.sponsors.service import MAX_CUMULATIVE_ATTEMPTS

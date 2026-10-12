@@ -9,7 +9,7 @@ involved.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
+from typing import Optional
 
 from app.sponsors.candidates import CandidateSearch
 from app.sponsors.resolver import (

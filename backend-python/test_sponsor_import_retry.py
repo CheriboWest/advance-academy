@@ -21,7 +21,6 @@ from app.sponsors.importer import (
     BATCH_MAX_ATTEMPTS,
     IMPORT_REQUEST_TIMEOUT,
     UPSERT_CHUNK,
-    RegisterValidationError,
     run_import,
 )
 

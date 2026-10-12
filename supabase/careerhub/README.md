@@ -1,6 +1,8 @@
-# Supabase (`infra/supabase`)
+# career-hub's Supabase reference (`supabase/careerhub`)
 
-Supabase project configuration and migrations for CareerHub UK.
+What career-hub kept in its own `infra/supabase/` before the merge. Its
+migrations now live in `supabase/migrations/` as `024_ch0001_*` … `038_ch0015_*`
+(the original number stays in the name, so `0004` below is `027_ch0004_*`).
 
 The **source of truth is the Supabase project itself** — it was created before
 these files existed, so `schema.sql` is a human-readable *mirror* of the
@@ -10,10 +12,10 @@ two as the live database being right and the mirror being stale.
 ## Layout
 
 ```
-infra/supabase/
-├── schema.sql        # mirror of the expected schema (reference only)
-├── migrations/       # applied in filename order
-└── tests/            # SQL self-checks, run against a throwaway database
+supabase/careerhub/
+├── schema.sql                  # mirror of the expected schema (reference only — never run it on live)
+├── verify_sponsor_import.sql   # read-only checks after a sponsor-register import
+└── tests/                      # SQL self-checks, run against a throwaway database
 ```
 
 ## Migrations
@@ -54,7 +56,7 @@ back, naming the table. Extend it explicitly rather than letting deletion depend
 on cascade behaviour nobody audited.
 
 Execute is granted to `service_role` only, so the destructive path is reachable
-only through `POST /companies/delete` on `apps/api`, which verifies the coach's
+only through `POST /companies/delete` on `backend-python`, which verifies the coach's
 JWT first. `anon` and `authenticated` (a coach's browser session) cannot call
 it.
 
@@ -64,9 +66,9 @@ Against a throwaway local PostgreSQL database (never the live project):
 
 ```bash
 createdb ch_test
-psql -v ON_ERROR_STOP=1 -d ch_test -f infra/supabase/schema.sql
-psql -v ON_ERROR_STOP=1 -d ch_test -f infra/supabase/migrations/0004_company_permanent_delete.sql
-psql -v ON_ERROR_STOP=1 -d ch_test -f infra/supabase/tests/0004_company_permanent_delete_test.sql
+psql -v ON_ERROR_STOP=1 -d ch_test -f supabase/careerhub/schema.sql
+psql -v ON_ERROR_STOP=1 -d ch_test -f supabase/migrations/027_ch0004_company_permanent_delete.sql
+psql -v ON_ERROR_STOP=1 -d ch_test -f supabase/careerhub/tests/0004_company_permanent_delete_test.sql
 ```
 
 Assertions use `raise exception`, so `ON_ERROR_STOP=1` is required — the run

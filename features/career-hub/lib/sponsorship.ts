@@ -105,7 +105,7 @@ export async function getSponsorshipStatuses(
   } = await supabase.auth.getSession();
   if (!session) return {};
 
-  // Matches MAX_COMPANIES_PER_STATUS_BATCH in apps/api/app/schemas.py — kept
+  // Matches MAX_COMPANIES_PER_STATUS_BATCH in backend-python/app/schemas.py — kept
   // in step so a large company list still renders badges rather than a
   // single oversized request being rejected outright.
   const CHUNK_SIZE = 500;

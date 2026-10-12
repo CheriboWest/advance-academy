@@ -8,7 +8,7 @@ chunked finalization functions from migration 0010 (begin / promote / withdraw
 suite of reassurances, which is exactly how earlier bugs here survived their
 tests.
 
-The RPC dispatch mirrors `infra/supabase/migrations/0010_...sql` function for
+The RPC dispatch mirrors `supabase/migrations/033_ch0010_...sql` function for
 function — including its status-transition guards (finalizing-only, refuse an
 empty stage, refuse withdrawal before promotion is complete) and its
 idempotent early-returns on an already-`success` import. Change one and change

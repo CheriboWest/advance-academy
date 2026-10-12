@@ -3,7 +3,7 @@ exist": `python test_public_company_summary_view.py` (no pytest, no network,
 no live database).
 
 The bug wasn't a mismatch between the frontend query and the migration
-files — apps/web/lib/coach.ts's SPONSORED_COMPANY_COLUMNS and migration
+files — features/career-hub/lib/coach.ts's SPONSORED_COMPANY_COLUMNS and migration
 0013's view definition already agreed (see 0014_repair_company_summary_view
 .sql's header comment for the full root-cause writeup); the live database
 had simply never had 0013 applied. This test can't reach across into a live

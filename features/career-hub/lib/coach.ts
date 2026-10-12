@@ -49,7 +49,7 @@ function inList(ids: string[]): string {
  * that call — and already redirected anyone unauthenticated — milliseconds
  * earlier, so a second one bought nothing but latency on every coach page
  * load. This project signs access tokens with asymmetric ES256 keys (see
- * apps/api/app/auth.py, which verifies the same tokens against the same
+ * backend-python/app/auth.py, which verifies the same tokens against the same
  * published JWKS), and for asymmetric keys getClaims() verifies the signature
  * locally via WebCrypto with no request at all. This is still a real
  * cryptographic check, so the defence-in-depth the layout wants is intact —

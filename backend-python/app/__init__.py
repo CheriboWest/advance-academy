@@ -1,4 +1,4 @@
-"""CareerHub UK FastAPI backend."""
+"""Career Hub FastAPI service (backend-python)."""
 
 __all__ = ["__version__"]
 
