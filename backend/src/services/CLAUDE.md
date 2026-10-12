@@ -62,19 +62,18 @@
   card to `preparing`; a thin JD with a link is fetched via `extractJobFromUrl` first.
 - Coach Understanding sends the CV with no size cap — mind token cost if inputs grow.
 
-## Gamification v2 (`gamification.service.ts`, `routes/gamification.ts`)
+## Gamification (`gamification.service.ts`, `routes/gamification.ts`)
 
-- Dark unless `GAMIFICATION_V2_ENABLED=true` (`isGamificationV2Enabled()` in
-  `config/features.ts`). Off: `GET /api/gamification` returns `{ enabled: false }`,
-  the other routes 404, everything else behaves as before — but 047's triggers still
-  capture intents, so nothing is lost before the flag flips.
-- **Never write a gamification table from the backend.** With the flag on, job-card
-  create/status go through the `create_saved_job` / `change_job_status` RPCs; Cover
-  Letter charges and writes back in one transaction via `record_cover_letter` /
-  `charge_credits`, called through `spendCreditsWith` in `lib/credits.ts` (the route
-  then skips `spendCredits`). `GET /api/engagement` stops writing `points_ledger`.
-- Nothing is awarded for reading a page: the summary endpoint only runs the processor
-  over captured intents.
+- The only points system (the v1 weekly goals / `points_ledger` of 045 and the
+  `GAMIFICATION_V2_ENABLED` flag are gone; the ledger table stays as history).
+  **Needs migration 047 applied** — job-card create/status call its RPCs.
+- **Never write a gamification table from the backend.** Job-card create/status go
+  through the `create_saved_job` / `change_job_status` RPCs; Cover Letter charges and
+  writes back in one transaction via `record_cover_letter` / `charge_credits`, called
+  through `spendCreditsWith` in `lib/credits.ts`.
+- Nothing is awarded for reading a page. `startRewardSweep()` (started in `main.ts`)
+  assigns today's quests and runs the processor for every user with pending intents
+  every 5 minutes; the summary endpoint does the same for its caller.
 - SQL error codes are mapped in `lib/gamification-errors.ts`: `GC001` → 429
   `CREDIT_EXHAUSTED`, `GN001` → 404, `GN002` → 409, `GX00x` / `42501` → 500.
 - Stuck intents block a user's queue until an admin calls

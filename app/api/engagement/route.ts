@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerEnv } from '@/shared/env/server'
 import { getProxyAuthToken } from '@/shared/api/proxy-auth'
 
-// Weekly tasks + points (GET) and the email-reminder switch (PATCH). Plain
+// The email-reminder switch (GET reads it, PATCH sets it). Plain
 // pass-through: the backend scopes everything to the signed-in user.
 
 async function forward(request: Request, method: 'GET' | 'PATCH', body?: string) {

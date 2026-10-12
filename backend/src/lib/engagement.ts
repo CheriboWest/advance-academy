@@ -1,44 +1,12 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import {
-  ENGAGEMENT_TASKS,
-  type EngagementMetric,
-  type EngagementTask,
-} from '@advance-academy/contracts/engagement';
 
 /**
- * Pure helpers for Progress & Engagement — no I/O, so node:test covers them.
- * The Supabase reads live in services/engagement.service.ts.
+ * Pure helpers for the reminder emails — no I/O, so node:test covers them.
  */
-
-export type WeekCounts = Record<EngagementMetric, number>;
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Monday 00:00 UTC of the week `now` falls in.
- * ponytail: UTC weeks, so a London student's week turns over at 00:00 or 01:00
- * local. Switch to Europe/London midnight if anyone ever notices the hour.
- */
-export function weekStartUtc(now: Date): Date {
-  const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const sinceMonday = (day.getUTCDay() + 6) % 7;
-  return new Date(day.getTime() - sinceMonday * DAY_MS);
-}
-
-export function addDays(d: Date, days: number): Date {
-  return new Date(d.getTime() + days * DAY_MS);
-}
 
 /** `YYYY-MM-DD` of a UTC instant. */
 export function utcDay(d: Date): string {
   return d.toISOString().slice(0, 10);
-}
-
-export function taskProgress(counts: WeekCounts): EngagementTask[] {
-  return ENGAGEMENT_TASKS.map((t) => {
-    const progress = Math.min(counts[t.metric] ?? 0, t.target);
-    return { ...t, progress, done: progress >= t.target };
-  });
 }
 
 /**

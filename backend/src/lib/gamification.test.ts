@@ -14,7 +14,6 @@ import {
   validateSkipReason,
 } from './gamification.js';
 import { mapGamificationDbError } from './gamification-errors.js';
-import { isGamificationV2Enabled } from '../config/features.js';
 
 test('localDay: the local date, not the UTC one', () => {
   const lateUtc = new Date('2026-10-11T23:30:00Z');
@@ -127,16 +126,3 @@ test('mapGamificationDbError: 047 SQLSTATEs become the HTTP errors routes unders
   assert.equal(mapGamificationDbError({ code: '23505' }, 'x').statusCode, 500);
 });
 
-test('isGamificationV2Enabled: off unless exactly "true"', () => {
-  const saved = process.env.GAMIFICATION_V2_ENABLED;
-  try {
-    for (const [value, want] of [[undefined, false], ['', false], ['1', false], ['yes', false], ['true', true], [' TRUE ', true]] as const) {
-      if (value === undefined) delete process.env.GAMIFICATION_V2_ENABLED;
-      else process.env.GAMIFICATION_V2_ENABLED = value;
-      assert.equal(isGamificationV2Enabled(), want, String(value));
-    }
-  } finally {
-    if (saved === undefined) delete process.env.GAMIFICATION_V2_ENABLED;
-    else process.env.GAMIFICATION_V2_ENABLED = saved;
-  }
-});
