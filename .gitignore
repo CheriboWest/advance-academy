@@ -27,3 +27,6 @@ backend/dist/
 __pycache__/
 *.pyc
 .pytest_cache/
+*.log
+# reports the test/dream-company harnesses regenerate on each run
+test/dream-company/COMPARISON-*.md
