@@ -45,6 +45,7 @@ export function SearchFilters({
   sector,
   sort,
   mode,
+  hiringOnly,
 }: SearchFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -73,6 +74,8 @@ export function SearchFilters({
         setOrDelete("sort", patch.sort, patch.sort === DEFAULT_SORT);
       if (patch.mode !== undefined)
         setOrDelete("mode", patch.mode, patch.mode === DEFAULT_MODE);
+      if (patch.hiringOnly !== undefined)
+        setOrDelete("all", "1", patch.hiringOnly);
 
       const qs = params.toString();
       startTransition(() => {
@@ -223,6 +226,18 @@ export function SearchFilters({
             </Button>
           </div>
         </form>
+
+        {mode === "company" && (
+          <label className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={!hiringOnly}
+              onChange={(event) => commit({ hiringOnly: !event.target.checked })}
+              className="size-4 accent-primary"
+            />
+            Include companies with no open jobs
+          </label>
+        )}
 
         {chips.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-2">

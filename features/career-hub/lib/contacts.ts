@@ -51,24 +51,17 @@ export async function getContactDirectory(): Promise<DirectoryContact[]> {
   return fetchContacts<DirectoryContact>("/directory");
 }
 
-// Matches MAX_COMPANY_IDS_PER_LIST in app/routers/contacts.py — a single
-// `company_ids` request over that cap is rejected outright (422), same
-// constraint `sponsorship.ts`'s getSponsorshipStatuses chunks around. Without
-// this, a coach whose (unpaginated — see getSponsoredCompanies) company list
-// grows past 500 gets one oversized request that 422s in full: fetchContacts
-// treats any non-2xx as "no contacts", so *every* company's card on the
-// Sponsored Companies list silently shows 0 contacts, including ones with
-// real contacts — while each company's own detail page keeps working, since
-// it queries a single `company_id=`, never `company_ids=`, and so never hits
-// this cap.
-const CHUNK_SIZE = 500;
+// Well under MAX_COMPANY_IDS_PER_LIST (500) in app/routers/contacts.py: the ids
+// travel in a GET query string that backend-python forwards to PostgREST as an
+// `in.(...)` filter, and 500 UUIDs make a ~20 KB URL. 100 matches
+// app/sponsors/service.py's cap for the same reason.
+const CHUNK_SIZE = 100;
 
 /**
  * Every contact across several companies — for the Outreach activity
  * dashboard, which needs to show a contact's name/role next to each outreach
- * row without an N+1 (one request per distinct company), and for
- * `getContactCounts` below. Chunked so a large company set is several
- * requests rather than one the backend rejects outright.
+ * row without an N+1 (one request per distinct company). Chunked so a large
+ * company set is several short requests rather than one oversized URL.
  */
 export async function getContactsForCompanies(
   companyIds: string[]
@@ -86,24 +79,4 @@ export async function getContactsForCompanies(
     )
   );
   return results.flat();
-}
-
-/**
- * Contact count per company, for the Sponsored Companies list's "N contacts"
- * signal — one batched request rather than one per row. Companies with zero
- * contacts are simply absent from the result (not present with a 0), so
- * callers should default a missing id to 0.
- */
-export async function getContactCounts(
-  companyIds: string[]
-): Promise<Record<string, number>> {
-  if (companyIds.length === 0) return {};
-
-  const contacts = await getContactsForCompanies(companyIds);
-
-  const counts: Record<string, number> = {};
-  for (const contact of contacts) {
-    counts[contact.company_id] = (counts[contact.company_id] ?? 0) + 1;
-  }
-  return counts;
 }

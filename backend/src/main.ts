@@ -34,6 +34,7 @@ import { registerEngagementRoutes } from './routes/engagement.js';
 import { registerGamificationRoutes } from './routes/gamification.js';
 import { registerCompanyContactsRoutes } from './routes/company-contacts.js';
 import { startEngagementReminders } from './lib/engagement-reminder.js';
+import { startRewardSweep } from './services/gamification.service.js';
 
 function loadBackendEnvFile() {
   const candidates = [
@@ -145,6 +146,7 @@ async function bootstrap() {
 
   startCvAnalysisReaper();
   startEngagementReminders();
+  startRewardSweep();
 
   console.log(`Backend running at http://localhost:${port}/api`);
   console.log(`Health check: http://localhost:${port}/api/health`);

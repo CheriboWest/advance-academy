@@ -46,6 +46,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         sector={filters.sector}
         sort={filters.sort}
         mode={filters.mode}
+        hiringOnly={filters.hiringOnly}
       />
 
       <PageContainer className="pt-6">

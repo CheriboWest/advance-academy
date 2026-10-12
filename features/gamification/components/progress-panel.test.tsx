@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { GamificationResponse, GamificationSummary } from '@advance-academy/contracts/gamification'
+import type { GamificationSummary } from '@advance-academy/contracts/gamification'
 
 import { JobsProgressStrip, ProgressPanel } from '@/features/gamification/components/progress-panel'
 
@@ -12,12 +12,11 @@ vi.mock('next/link', () => ({
   ),
 }))
 
-// The v1 panel is its own feature; here we only care whether it is chosen.
-vi.mock('@/features/engagement/components/this-week', () => ({
-  ThisWeek: () => <div>weekly-tasks-panel</div>,
-}))
+const account: { data: { isAdmin: boolean } | undefined; isLoading: boolean } = { data: undefined, isLoading: false }
+vi.mock('@/features/engagement/components/reminders', () => ({ Reminders: () => null }))
+vi.mock('@/shared/hooks/use-account', () => ({ useAccount: () => account }))
 
-const state: { data: GamificationResponse | undefined; isLoading: boolean } = { data: undefined, isLoading: false }
+const state: { data: GamificationSummary | undefined; isLoading: boolean } = { data: undefined, isLoading: false }
 const markSeen = vi.fn()
 const bookRest = vi.fn()
 const setGoals = vi.fn()
@@ -31,7 +30,6 @@ vi.mock('@/features/gamification/hooks/use-gamification', () => ({
 
 function summary(overrides: Partial<GamificationSummary> = {}): GamificationSummary {
   return {
-    enabled: true,
     today: '2026-10-11',
     xp: { total: 47, thisWeek: 40, weeklyTarget: 80 },
     streak: { current: 3, activeToday: false, restDaysLeftThisMonth: 2, upcomingRestDays: [] },
@@ -55,6 +53,8 @@ function summary(overrides: Partial<GamificationSummary> = {}): GamificationSumm
 beforeEach(() => {
   state.data = undefined
   state.isLoading = false
+  account.data = { isAdmin: false }
+  account.isLoading = false
   markSeen.mockReset()
   bookRest.mockReset()
   setGoals.mockReset()
@@ -62,24 +62,23 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('ProgressPanel', () => {
-  it('keeps the weekly-tasks panel while the backend runs without gamification v2', () => {
-    state.data = { enabled: false }
-    render(<ProgressPanel />)
-    expect(screen.getByText('weekly-tasks-panel')).toBeTruthy()
-    expect(screen.queryByText('Your progress')).toBeNull()
-  })
-
-  it('falls back to the weekly-tasks panel when the summary cannot load', () => {
+  it('renders nothing when the summary cannot load', () => {
     state.data = undefined
-    render(<ProgressPanel />)
-    expect(screen.getByText('weekly-tasks-panel')).toBeTruthy()
+    const { container } = render(<ProgressPanel />)
+    expect(container.textContent).toBe('')
   })
 
-  it('shows the v2 panel when the backend reports it enabled', () => {
+  it('renders nothing for a coach (admin)', () => {
+    state.data = summary()
+    account.data = { isAdmin: true }
+    const { container } = render(<ProgressPanel />)
+    expect(container.textContent).toBe('')
+  })
+
+  it('shows the progress panel for a student', () => {
     state.data = summary()
     render(<ProgressPanel />)
     expect(screen.getByText('Your progress')).toBeTruthy()
-    expect(screen.queryByText('weekly-tasks-panel')).toBeNull()
     expect(screen.getByText('3-day streak')).toBeTruthy()
     expect(screen.getByText('10 Career Coins')).toBeTruthy()
     expect(screen.getByText('40 / 80 XP this week')).toBeTruthy()
@@ -124,13 +123,14 @@ describe('ProgressPanel', () => {
 })
 
 describe('JobsProgressStrip', () => {
-  it('renders nothing while gamification v2 is off', () => {
-    state.data = { enabled: false }
+  it('renders nothing for a coach (admin)', () => {
+    state.data = summary()
+    account.data = { isAdmin: true }
     const { container } = render(<JobsProgressStrip />)
     expect(container.textContent).toBe('')
   })
 
-  it('shows streak, weekly XP and coins when on', () => {
+  it('shows streak, weekly XP and coins', () => {
     state.data = summary()
     render(<JobsProgressStrip />)
     expect(screen.getByText('3-day streak')).toBeTruthy()

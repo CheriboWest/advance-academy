@@ -3,8 +3,7 @@ import { getServerEnv } from '@/shared/env/server'
 import { getProxyAuthToken } from '@/shared/api/proxy-auth'
 
 // Shared pass-through for /api/gamification/*. The backend scopes everything
-// to the signed-in user and answers 404 for all but the summary while
-// GAMIFICATION_V2_ENABLED is off.
+// to the signed-in user.
 
 export async function forwardGamification(
   request: Request,

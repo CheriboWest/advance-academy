@@ -31,12 +31,13 @@ Endpoint-by-endpoint reference (sponsor register, crawler, deletion) is `README.
 
 Full rollout and undo steps: `git show 062d0e5:docs/JOB_EXPIRY.md`.
 
-- `jobs.is_active` is the only switch every student query, the
-  `public_company_summary` view and RLS read: closing a job = `is_active = false`
-  plus `closed_reason`. When a company's last job closes it disappears from
-  `/search` and its company pages 404.
-- `expired`: Reed's stated `expires_at` has passed — closed on ingest and by
-  `close_expired_jobs()` after every crawl. Adzuna states no date.
+- Closing a job = `is_active = false` plus `closed_reason`. The
+  `public_company_summary` view and the jobs RLS policy also hide a job whose
+  `expires_at` has passed (migration 048), so it vanishes before it is closed.
+  A company whose last job closes stays listed with `open_jobs = 0`.
+- `expired`: Reed's stated `expires_at` has passed — closed on ingest, after every
+  crawl, and hourly by pg_cron (`close-expired-jobs`, migration 048). Adzuna states
+  no date.
   `stale`: repeated, fully successful fetches stopped returning it —
   `close_stale_jobs()` is a **dry run by default** and refuses to apply until every
   search has coverage (≥2 non-empty completed fetches over ≥7 days). Rows from

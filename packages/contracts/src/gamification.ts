@@ -69,14 +69,8 @@ export interface GamificationJourney {
   offer: number
 }
 
-/** GET /api/gamification when the backend runs without GAMIFICATION_V2_ENABLED. */
-export interface GamificationDisabled {
-  enabled: false
-}
-
 /** GET /api/gamification */
 export interface GamificationSummary {
-  enabled: true
   /** The student's local day, `YYYY-MM-DD`, in their timezone. */
   today: string
   xp: { total: number; thisWeek: number; weeklyTarget: number }
@@ -89,8 +83,6 @@ export interface GamificationSummary {
   /** Rewards still waiting to be judged (a retry is backing off, or one is stuck). */
   pendingRewards: number
 }
-
-export type GamificationResponse = GamificationDisabled | GamificationSummary
 
 /** PATCH /api/gamification/goals — every field optional. */
 export interface UpdateGamificationGoalsRequest {

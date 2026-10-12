@@ -6,7 +6,6 @@ import { bookRestDay, getGamification, markAchievementsSeen, updateGamificationG
 
 export const GAMIFICATION_KEY = ['gamification'] as const
 
-/** `{ enabled: false }` while the backend runs without GAMIFICATION_V2_ENABLED. */
 export function useGamification() {
   return useQuery({ queryKey: GAMIFICATION_KEY, queryFn: getGamification, retry: false, staleTime: 30_000 })
 }

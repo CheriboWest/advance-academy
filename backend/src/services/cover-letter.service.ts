@@ -14,8 +14,7 @@ import {
 } from '../lib/cover-letter/prompts.js';
 import { getCvVersion } from './cv-knowledge.service.js';
 import { extractJobFromUrl } from './job-extraction.service.js';
-import { changeJobStatus, getSavedJob, updateSavedJob } from './job-tracking.service.js';
-import { isGamificationV2Enabled } from '../config/features.js';
+import { getSavedJob, updateSavedJob } from './job-tracking.service.js';
 import { spendCreditsWith } from '../lib/credits.js';
 import { mapGamificationDbError } from '../lib/gamification-errors.js';
 import { getSupabase } from '../lib/supabase.js';
@@ -145,15 +144,7 @@ export async function generateCoverLetter(
     .trim();
   if (!coverLetter) throw httpError(502, 'The letter came back empty. Please try again.');
 
-  if (isGamificationV2Enabled()) {
-    await chargeAndSaveCoverLetter(userId, job.savedJobId, coverLetter, cv.id);
-  } else if (job.savedJobId) {
-    await updateSavedJob(userId, job.savedJobId, { coverLetterText: coverLetter, cvVersionId: cv.id });
-    // Writing the letter is preparing the application — but never move a card backwards.
-    if (job.status === 'saved') {
-      await changeJobStatus(userId, job.savedJobId, { status: 'preparing', note: 'Cover letter written' });
-    }
-  }
+  await chargeAndSaveCoverLetter(userId, job.savedJobId, coverLetter, cv.id);
 
   return {
     coverLetter,
@@ -164,12 +155,11 @@ export async function generateCoverLetter(
 }
 
 /**
- * Gamification v2 (migration 047). The charge and the write-back are one
+ * Migration 047. The charge and the write-back are one
  * transaction: record_cover_letter charges, writes the letter and CV onto the
  * card, sets the cover-letter marker (the only way to — guard G2) and moves a
  * `saved` card to `preparing`; any failure rolls all of it back. With no card
- * there is nothing to write, so it only charges. The route then skips
- * spendCredits.
+ * there is nothing to write, so it only charges.
  */
 export async function chargeAndSaveCoverLetter(
   userId: string,

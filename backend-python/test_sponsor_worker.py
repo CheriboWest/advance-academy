@@ -493,6 +493,20 @@ pending = asyncio.run(
 check("PAGING: every unchecked company past the 1000-row cap is found",
       len(pending) == 2500 and len(set(pending)) == 2500, f"got {len(pending)}")
 
+# A small batch must still reach old companies once the newest are all
+# checked: the search used to stop after the newest `limit * 4` companies.
+aged = CappedRest([company(f"co-a{i}") for i in range(2500)])
+aged.checks = [
+    {"company_id": f"co-a{i}", "last_decision": "no_match", "register_import_id": "import-1",
+     "attempts": 0, "checked_at": "2026-10-01T00:00:00Z", "candidate_count": 0}
+    for i in range(2000)
+]
+pending = asyncio.run(
+    companies_needing_resolution(None, aged, limit=50, current_import="import-1")
+)
+check("WINDOW: with the newest 2,000 checked, limit=50 still finds 50 older ones",
+      pending == [f"co-a{i}" for i in range(2000, 2050)], f"got {pending[:3]}… ({len(pending)})")
+
 print()
 if _failures:
     print(f"{len(_failures)} FAILED:")

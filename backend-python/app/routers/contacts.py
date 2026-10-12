@@ -1,13 +1,12 @@
 """Coach-facing company contacts: CRUD, authenticated, service-role-mediated.
 
 Contacts are shared crawler-adjacent data, like companies/jobs — not
-per-coach data like outreach drafts — so any authenticated coach may view,
-add, edit or delete any company's contacts, exactly as any coach may edit a
-company. See migration 0011 for why this table is RLS-denied and reachable
-only through this router (never direct from the browser, and never on a
-public/student-facing page): `get_current_user` — "the request carries a
-valid Supabase session" — is this project's only coach gate, the same as
-every other route in this codebase.
+per-coach data like outreach drafts — so any coach may view, add, edit or
+delete any company's contacts. The table is RLS-denied (migration 034) and
+never read from the browser. `get_current_user` admits coaches only
+(`users.is_admin` or `ADMIN_USER_IDS`, app/auth.py). Students on Membership
+see a reduced shape (no phone/notes) through Fastify
+`routes/company-contacts.ts`, not through this router.
 """
 
 from __future__ import annotations

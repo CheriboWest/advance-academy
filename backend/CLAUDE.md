@@ -2,8 +2,8 @@
 
 `src/main.ts` boots everything: env, CORS (`FRONTEND_URL`, comma-split), rate-limit
 plugin, the auth/approval preHandler, every `register*Routes`, and the in-process
-timers (`startCvAnalysisReaper`, `startEngagementReminders`). **A new route module
-does nothing until it is registered in `main.ts`.**
+timers (`startCvAnalysisReaper`, `startEngagementReminders`, `startRewardSweep`).
+**A new route module does nothing until it is registered in `main.ts`.**
 
 ## Layout rules
 
@@ -61,9 +61,9 @@ does nothing until it is registered in `main.ts`.**
 
 - Credits (`lib/credits.ts`): `assertCredits` before the LLM call, `spendCredits` after
   success. Interview Lab and company contacts also need Membership (`requireMembership`).
-- Engagement points (`points_ledger`) are a score, never credits — don't route them through `lib/credits.ts`.
+- Gamification XP and Career Coins are a score, never credits — don't route them through `lib/credits.ts`.
 - Job Tracking spends nothing and records no tool result on purpose.
-- Engagement reminder emails run hourly in-process, deduped by `reminder_sends`, and
+- Follow-up reminder emails run hourly in-process, deduped by `reminder_sends`, and
   stay off unless `ENGAGEMENT_REMINDERS_ENABLED=true`.
 
 ## Uploads
