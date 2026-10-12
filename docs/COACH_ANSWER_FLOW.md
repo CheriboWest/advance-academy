@@ -36,7 +36,7 @@ sequenceDiagram
     autonumber
     participant U as User
     participant Panel as CoachPanel<br/>(interview-prep-screen.tsx)
-    participant Hook as useInterview<br/>(hooks/use-interview.ts)
+    participant Hook as useInterview<br/>(features/interview-prep/hooks/use-interview.ts)
     participant Proxy as Next.js proxy<br/>app/api/interview/coach-answer/*
     participant FA as Fastify routes<br/>backend/src/routes/coach-answer.ts
     participant Svc as coach-answer.service
@@ -122,7 +122,7 @@ Output is JSON: `{ critique, improvedAnswer, missingEvidencePrompts[] }` — unc
 
 ### Conversation history
 
-The frontend (`hooks/use-interview.ts` `requestCoachGenerate`) takes every message in `session.messages` *before* the message being enhanced and passes them through as `{ role, content }[]`. The server caps that to the last 10 turns (`COACH_HISTORY_TURNS`) — roughly the last 5 question/answer pairs, more than enough for coherence without bloating the prompt.
+The frontend (`features/interview-prep/hooks/use-interview.ts` `requestCoachGenerate`) takes every message in `session.messages` *before* the message being enhanced and passes them through as `{ role, content }[]`. The server caps that to the last 10 turns (`COACH_HISTORY_TURNS`) — roughly the last 5 question/answer pairs, more than enough for coherence without bloating the prompt.
 
 ### IRS score and rationale
 
@@ -188,7 +188,7 @@ When any in-place edit changes an artifact, `handleRefreshBullet` re-fetches tha
 
 ### Hook — `useInterview` (preview / generate / setCoachPreview)
 
-[hooks/use-interview.ts](../hooks/use-interview.ts) (search for `requestCoachPreview`, `requestCoachGenerate`, `setCoachPreview`)
+[features/interview-prep/hooks/use-interview.ts](../features/interview-prep/hooks/use-interview.ts) (search for `requestCoachPreview`, `requestCoachGenerate`, `setCoachPreview`)
 
 - `requestCoachPreview(messageId)` — POSTs `{ question }` to `/api/interview/coach-answer/preview`. On success, stashes the response on `message.coachPreview`.
 - `setCoachPreview(messageId, coachPreview)` — synchronous helper for the panel to update the in-memory preview after a picker-add or in-place artifact edit, without re-running embedding retrieval.
@@ -305,6 +305,6 @@ These aren't bugs — just design space we haven't explored:
 - Routes: [backend/src/routes/coach-answer.ts](../backend/src/routes/coach-answer.ts), [backend/src/routes/cv-library.ts](../backend/src/routes/cv-library.ts) (`/bullets/:id/details`)
 - Backend client: [shared/api/backend-client.ts](../shared/api/backend-client.ts) — `coachAnswerPreviewWithBackend`, `coachAnswerGenerateWithBackend`, `getBulletDetailsWithBackend`
 - Proxies: [app/api/interview/coach-answer/preview/route.ts](../app/api/interview/coach-answer/preview/route.ts), [app/api/interview/coach-answer/generate/route.ts](../app/api/interview/coach-answer/generate/route.ts), [app/api/cv-library/bullets/[id]/details/route.ts](../app/api/cv-library/bullets/%5Bid%5D/details/route.ts)
-- Hook: [hooks/use-interview.ts](../hooks/use-interview.ts) — `requestCoachPreview`, `requestCoachGenerate`, `setCoachPreview`, `submitJitClarification`
+- Hook: [features/interview-prep/hooks/use-interview.ts](../features/interview-prep/hooks/use-interview.ts) — `requestCoachPreview`, `requestCoachGenerate`, `setCoachPreview`, `submitJitClarification`
 - UI: [features/interview-prep/components/interview-prep-screen.tsx](../features/interview-prep/components/interview-prep-screen.tsx) — `CoachPanel`, `CoachBulletRow`, `CoachGapBlock`, `CoachArtifactView`, `CoachArtifactComposer`, `CoachBulletPicker`
 - Types: [features/interview-prep/types.ts](../features/interview-prep/types.ts) — `CoachPreview`, `CoachPreviewBullet`, `UserBulletSummaryDto`; [backend/src/types/cv-knowledge.ts](../backend/src/types/cv-knowledge.ts) — server-side equivalents

@@ -24,6 +24,24 @@ This folder is the single source of truth for understanding, running, and extend
 - **[CONVENTIONS.md](./CONVENTIONS.md)** — naming, file layout, layering rules, error shape, environment access, commit style.
 - **[ADD_A_FEATURE.md](./ADD_A_FEATURE.md)** — end-to-end walkthrough of adding a new feature using a "Job Tracker" example.
 
+### Feature deep-dives
+
+- **[INTERVIEW_PREP_WORKFLOW.md](./INTERVIEW_PREP_WORKFLOW.md)** — Interview Prep session lifecycle, LLM call sites, persistence, voice mode, prompt caching.
+- **[COACH_ANSWER_FLOW.md](./COACH_ANSWER_FLOW.md)** — the "Enhance Response" (coach-answer) flow: retrieval, preview → generate, failure modes.
+- **[CV_LIBRARY_UPLOAD_FLOW.md](./CV_LIBRARY_UPLOAD_FLOW.md)** — CV Library upload, from the Upload click to the bullet-resolution screen.
+- **[LLM_TOKEN_BUDGET.md](./LLM_TOKEN_BUDGET.md)** — `max_tokens` sizing and token footprints for Interview Prep and CV Library.
+- **[PERF_BATCHED_QUERIES.md](./PERF_BATCHED_QUERIES.md)** — the CV Library N+1 fix (batched queries).
+
+### Operations
+
+- **[JOB_SOURCE_RUNBOOK.md](./JOB_SOURCE_RUNBOOK.md)** — Dream Company live-vacancy sources (Adzuna + Reed).
+- **[CUTOVER.md](./CUTOVER.md)** — moving the merged schema onto the production Supabase project.
+
+### Planning
+
+- **[BACKLOG.md](./BACKLOG.md)** — product feedback not built yet.
+- **[archive/](./archive/)** — finished plans and sprint docs, kept for history. They describe the code as it was when written.
+
 ## Keeping these docs accurate
 
 These docs describe patterns that already exist in the codebase (CV Optimizer, Dream Company, Outreach all follow the same shape). If you change a pattern in code, update the corresponding doc in the same PR. If you find a doc that disagrees with reality, trust the code and fix the doc.

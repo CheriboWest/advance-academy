@@ -209,4 +209,4 @@ A second auth layer lives at the Next.js edge: `middleware.ts` in the repo root 
 
 `/api/admin/*` and `GET /api/account/me` are deliberately **not** rate-limited: admin-only or single-row reads, no LLM spend. `/api/admin/*` has no `preHandler` either — each handler calls `isAdminUser(request.userId)` inline and 403s.
 
-When adding a new route that hits an LLM, opt it in with a `config.rateLimit` block. For per-user limits, set `keyGenerator: (req) => req.userId ?? req.ip` and provide a route-specific `errorResponseBuilder` so the frontend can show a feature-tailored message — `hooks/use-interview.ts` reads `body.message` from the 429 response and surfaces it in the existing red error banner.
+When adding a new route that hits an LLM, opt it in with a `config.rateLimit` block. For per-user limits, set `keyGenerator: (req) => req.userId ?? req.ip` and provide a route-specific `errorResponseBuilder` so the frontend can show a feature-tailored message — `features/interview-prep/hooks/use-interview.ts` reads `body.message` from the 429 response and surfaces it in the existing red error banner.

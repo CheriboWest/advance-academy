@@ -18,6 +18,6 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    include: ['{app,features,shared,components,hooks}/**/*.test.{ts,tsx}'],
+    include: ['{app,features,shared,components}/**/*.test.{ts,tsx}'],
   },
 })

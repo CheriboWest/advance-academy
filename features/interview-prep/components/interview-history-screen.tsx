@@ -23,9 +23,9 @@ import type {
   SessionExchangeCoach,
   IRSScore,
 } from '@/features/interview-prep/types'
-import { PERSONAS } from '@/data/personas'
+import { PERSONAS } from '@/features/interview-prep/data/personas'
 import { irsScoreColor, irsScoreLabel } from '@/shared/utils/score-utils'
-import { IRSMeter } from '@/components/interview/irs-meter'
+import { IRSMeter } from '@/features/interview-prep/components/irs-meter'
 
 export function InterviewHistoryScreen() {
   const [sessions, setSessions] = useState<SessionListItem[]>([])

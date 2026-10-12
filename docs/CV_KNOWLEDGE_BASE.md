@@ -275,7 +275,7 @@ Plus exported types: `CvVersionSummary`, `BulletWithGaps`, `MissingEvidencePromp
 ### Interview prep changes
 
 - [features/interview-prep/types.ts](../features/interview-prep/types.ts) — added `CoachResult`, `MissingEvidencePrompt`. Extended `InterviewMessage` with optional `coach?: CoachResult` and `questionAsked?: string` (the interviewer question this candidate message answered).
-- [hooks/use-interview.ts](../hooks/use-interview.ts):
+- [features/interview-prep/hooks/use-interview.ts](../features/interview-prep/hooks/use-interview.ts):
   - `sendMessage` now records `questionAsked` on each scored candidate message.
   - New `requestCoach(messageId)` — POSTs to `/api/interview/coach-answer` and stores the result on the message.
   - New `submitJitClarification(messageId, promptIndex, answer)` — POSTs to `/api/cv-library/jit-clarification`, then re-runs the coach so the resolved placeholder disappears.
