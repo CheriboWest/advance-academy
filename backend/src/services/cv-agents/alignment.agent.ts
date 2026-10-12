@@ -9,7 +9,7 @@
 import { assertLlmConfigured, createAnthropicClient } from '../../lib/llm-anthropic.js';
 import { cvAgentModel, CV_LLM_CLIENT_OPTIONS } from './models.js';
 import { runJsonTask } from '../../lib/run-json-task.js';
-import { CV_ALIGNMENT_PROMPT } from '../../prompts/cv-alignment.prompt.js';
+import { CV_ALIGNMENT_PROMPT } from './prompts/cv-alignment.prompt.js';
 import { normalizeAlignment } from './normalizers.js';
 import type { JdAlignment } from '@advance-academy/contracts/cv-optimizer';
 

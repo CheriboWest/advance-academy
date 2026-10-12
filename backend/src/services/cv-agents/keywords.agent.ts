@@ -11,7 +11,7 @@
 import { assertLlmConfigured, createAnthropicClient } from '../../lib/llm-anthropic.js';
 import { cvAgentModel, CV_LLM_CLIENT_OPTIONS } from './models.js';
 import { runJsonTask } from '../../lib/run-json-task.js';
-import { CV_KEYWORDS_PROMPT } from '../../prompts/cv-keywords.prompt.js';
+import { CV_KEYWORDS_PROMPT } from './prompts/cv-keywords.prompt.js';
 import { normalizeKeywords } from './normalizers.js';
 import type { KeywordHighlight } from '@advance-academy/contracts/cv-optimizer';
 

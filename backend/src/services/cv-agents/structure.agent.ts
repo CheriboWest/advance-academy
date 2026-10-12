@@ -8,7 +8,7 @@
 import { assertLlmConfigured, createAnthropicClient } from '../../lib/llm-anthropic.js';
 import { cvAgentModel, CV_LLM_CLIENT_OPTIONS } from './models.js';
 import { runJsonTask } from '../../lib/run-json-task.js';
-import { CV_STRUCTURE_PROMPT } from '../../prompts/cv-structure.prompt.js';
+import { CV_STRUCTURE_PROMPT } from './prompts/cv-structure.prompt.js';
 import { todayInstruction } from './today-instruction.js';
 import { normalizeStructure } from './normalizers.js';
 import type { AnalyzeCvResult, FormatCheck } from '@advance-academy/contracts/cv-optimizer';
