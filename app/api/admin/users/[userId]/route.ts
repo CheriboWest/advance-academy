@@ -9,7 +9,7 @@ const TIERS: Tier[] = ['trial', 'membership']
 const REVIEW_DECISIONS = ['approved', 'rejected'] as const
 
 // Validate here as well as on the backend — the proxy layer owns request-shape
-// checks so a malformed body never reaches Fastify (see docs/ARCHITECTURE.md).
+// checks so a malformed body never reaches Fastify (see app/api/CLAUDE.md).
 function toPatch(body: unknown): AdminUserPatch | null {
   if (!body || typeof body !== 'object') return null
   const b = body as Record<string, unknown>

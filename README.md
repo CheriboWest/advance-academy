@@ -26,13 +26,12 @@ Career Hub pages also need `backend-python` on :8000 — see [`backend-python/RE
 ## Check
 
 ```bash
-npx tsc --noEmit && npm run typecheck --workspace backend
-npm test && npm run test --workspace backend
+npm run check   # both type checks + vitest + backend node:test + backend-python self-checks
 ```
 
 ## Documentation
 
-Developer docs live in [`docs/`](./docs/README.md): [Getting Started](./docs/GETTING_STARTED.md),
-[Architecture](./docs/ARCHITECTURE.md), [Backend](./docs/BACKEND.md),
-[Frontend](./docs/FRONTEND.md), [API reference](./docs/API_REFERENCE.md),
-[Conventions](./docs/CONVENTIONS.md), [Add a feature](./docs/ADD_A_FEATURE.md).
+Context lives next to the code it describes: start with [`CLAUDE.md`](./CLAUDE.md)
+(a map of the repo), then the `CLAUDE.md` in the folder you are working in —
+`backend/`, `backend/src/services/`, `backend-python/`, `supabase/`, `app/api/`,
+`shared/`, `features/` and some features. They are written for AI agents and humans alike.
