@@ -28,6 +28,9 @@ are `*.staging`). Any write — SQL, scripts, bulk LLM jobs — hits real users:
 - career-hub's history is reachable only with `-m`:
   `git log -m --follow -- backend-python/app/main.py`.
 
+Shared agent config is in `.claude/`: skills `add-feature`, `add-migration`, `verify`;
+`rules/tests.md` (which test runner where); `settings.json` (allowed commands, `git push` denied).
+
 ## Git workflow
 
 - **Commit automatically** to the current branch once a task is done and
