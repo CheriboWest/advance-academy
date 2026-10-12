@@ -4,6 +4,7 @@ import { assertCredits, spendCredits } from '../lib/credits.js';
 import { perUserDaily } from '../lib/rate-limit.js';
 import { isOverloadedError } from '../lib/llm-anthropic.js';
 import { generateCoverLetter } from '../services/cover-letter.service.js';
+import { isGamificationV2Enabled } from '../config/features.js';
 import { recordToolResult } from '../services/tool-results.service.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -50,7 +51,8 @@ export async function registerCoverLetterRoutes(app: FastifyInstance) {
       try {
         await assertCredits(request.userId, 'coverLetter');
         const result = await generateCoverLetter(request.userId, request.body);
-        await spendCredits(request.userId, 'coverLetter');
+        // v2 charged inside the transaction that saved the letter.
+        if (!isGamificationV2Enabled()) await spendCredits(request.userId, 'coverLetter');
         await recordToolResult(
           request.userId,
           'cover_letter',

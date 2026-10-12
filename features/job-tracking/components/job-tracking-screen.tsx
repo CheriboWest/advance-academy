@@ -17,6 +17,7 @@ import { todayLocalDay, useJobBoardSummary, useSavedJobs } from '../hooks/use-jo
 import { JobCard } from './job-card'
 import { JobFormDialog, type JobFormPrefill } from './job-form-dialog'
 import { STATUS_TONE } from './job-status-badge'
+import { JobsProgressStrip } from '@/features/gamification/components/progress-panel'
 
 type Filter = 'all' | 'open' | SavedJobStatus
 
@@ -101,6 +102,8 @@ export function JobTrackingScreen() {
           Add job
         </Button>
       </header>
+
+      <JobsProgressStrip />
 
       {/* Counts per stage. Each tile is also a filter. */}
       <section aria-label="Jobs by status" className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">

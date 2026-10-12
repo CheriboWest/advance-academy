@@ -47,6 +47,8 @@ function useJobMutation<TVars, TData>(fn: (vars: TVars) => Promise<TData>, jobId
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LIST_KEY })
       if (jobId) queryClient.invalidateQueries({ queryKey: detailKey(jobId) })
+      // A save or a status change may have earned something (gamification v2).
+      queryClient.invalidateQueries({ queryKey: ['gamification'] })
     },
     retry: false,
   })

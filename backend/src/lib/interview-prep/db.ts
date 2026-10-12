@@ -331,6 +331,35 @@ export async function dbStoreQuestion(
   }
 }
 
+/**
+ * True only when the session exists and is this user's. Every write keyed by a
+ * client-supplied dbSessionId goes through this first: the tables are
+ * service-role only, so without it any student who learns a session id could
+ * write answers into, or complete, someone else's mock (and 047 rewards both).
+ * A failed lookup reads as "not yours" — fail closed.
+ */
+export async function dbSessionBelongsToUser(sessionId: string, userId: string | undefined): Promise<boolean> {
+  if (!userId) return false;
+  const supabase = safeSupabase();
+  if (!supabase) return false;
+  try {
+    const { data, error } = await supabase
+      .from('interview_sessions')
+      .select('id')
+      .eq('id', sessionId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) {
+      console.error('[db] Failed to check session owner:', error);
+      return false;
+    }
+    return Boolean(data);
+  } catch (err) {
+    console.error('[db] dbSessionBelongsToUser error:', err);
+    return false;
+  }
+}
+
 export async function dbQuestionBelongsToSession(
   sessionId: string,
   questionId: string,
@@ -540,14 +569,17 @@ interface RawAssessmentRow {
 
 export async function dbGetSession(
   id: string,
+  userId: string | undefined,
 ): Promise<(Record<string, unknown> & { exchanges: SessionExchangeRow[] }) | null> {
   const supabase = safeSupabase();
-  if (!supabase) return null;
+  if (!supabase || !userId) return null;
 
+  // Scoped by owner: another student's session id reads as not found.
   const { data: sessionRow, error: sessionErr } = await supabase
     .from('interview_sessions')
     .select('*')
     .eq('id', id)
+    .eq('user_id', userId)
     .single();
   if (sessionErr || !sessionRow) {
     console.error('[db] dbGetSession error:', sessionErr);
