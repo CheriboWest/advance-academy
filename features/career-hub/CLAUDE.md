@@ -26,8 +26,11 @@ everything else is here. Data comes from **backend-python**, not Fastify.
 ## Supabase reads (`lib/supabase.ts`, `lib/queries.ts`)
 
 - Its own anon client, read-only: public pages read the `public_company_summary`
-  view (companies with ≥1 active job) and `jobs`. The `companies` table itself is
-  not anon-readable since migration 040 — don't query it from here.
+  view and `jobs`. Since migration 048 the view lists **every** company
+  (`open_jobs = 0` when none); add `.gt("open_jobs", 0)` where a page means
+  "companies hiring" (`/search` default, coach dashboard and companies list).
+  The `companies` table itself is not anon-readable since migration 040 — don't
+  query it from here.
 
 ## Coach workspace
 

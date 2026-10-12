@@ -39,6 +39,10 @@ export async function fetchCompanies(
     query = query.eq("sector", filters.sector);
   }
 
+  if (filters.hiringOnly) {
+    query = query.gt("open_jobs", 0);
+  }
+
   switch (filters.sort) {
     case "jobs_desc":
       query = query.order("open_jobs", {

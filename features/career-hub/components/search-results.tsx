@@ -59,6 +59,7 @@ function pageHref(filters: SearchFiltersState, page: number): string {
   if (filters.location !== ALL) params.set("location", filters.location);
   if (filters.sector !== ALL) params.set("sector", filters.sector);
   if (filters.sort !== DEFAULT_SORT) params.set("sort", filters.sort);
+  if (!filters.hiringOnly) params.set("all", "1");
   if (page > 1) params.set("page", String(page));
   const qs = params.toString();
   return qs ? `/search?${qs}` : "/search";

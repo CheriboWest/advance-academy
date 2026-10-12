@@ -134,17 +134,22 @@ export async function getDashboardData(): Promise<CoachDashboardData> {
   // reflect only the coach's visible companies.
   const hiddenIds = await getHiddenCompanyIds(supabase);
 
+  // Since migration 048 the view lists job-less companies too (open_jobs = 0);
+  // the dashboard is about companies hiring, so every query keeps to those.
   let totalQuery = supabase
     .from("public_company_summary")
-    .select("*", { count: "exact", head: true });
+    .select("*", { count: "exact", head: true })
+    .gt("open_jobs", 0);
   let highScoreQuery = supabase
     .from("public_company_summary")
     .select("*", { count: "exact", head: true })
+    .gt("open_jobs", 0)
     .gte("lead_score", HIGH_SCORE_THRESHOLD);
   // The view exposes no timestamp column, so we approximate "recent" by id.
   let recentQuery = supabase
     .from("public_company_summary")
     .select(COMPANY_COLUMNS)
+    .gt("open_jobs", 0)
     .order("id", { ascending: false })
     .limit(10);
   let topHiringQuery = supabase
@@ -165,6 +170,7 @@ export async function getDashboardData(): Promise<CoachDashboardData> {
     let query = supabase
       .from("public_company_summary")
       .select("id, open_jobs")
+      .gt("open_jobs", 0)
       .order("id")
       .range(from, to);
     if (hiddenIds.length) query = query.not("id", "in", inList(hiddenIds));
@@ -247,6 +253,7 @@ export async function getCoachCompanies(
     let companiesQuery = supabase
       .from("public_company_summary")
       .select("id, slug, name, region, hq_location, open_jobs, lead_score")
+      .gt("open_jobs", 0) // companies hiring, as before migration 048
       .order("name", { ascending: true })
       .order("id")
       .range(from, to);

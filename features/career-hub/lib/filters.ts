@@ -102,6 +102,9 @@ export interface SearchFiltersState {
   sort: SortOption;
   mode: SearchMode; // "company" (name search) or "role" (job-title search)
   page: number; // 1-based, company mode only
+  // Company mode: only companies with an open job. `?all=1` lists every company
+  // (migration 048 keeps job-less companies in the view with open_jobs = 0).
+  hiringOnly: boolean;
 }
 
 type RawSearchParams = Record<string, string | string[] | undefined>;
@@ -130,5 +133,7 @@ export function parseSearchFilters(params: RawSearchParams): SearchFiltersState 
 
   const page = Math.max(1, Math.floor(Number(firstValue(params.page))) || 1);
 
-  return { q, location, sector, sort, mode, page };
+  const hiringOnly = firstValue(params.all) !== "1";
+
+  return { q, location, sector, sort, mode, page, hiringOnly };
 }
