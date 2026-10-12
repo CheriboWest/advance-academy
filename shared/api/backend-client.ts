@@ -7,7 +7,6 @@ import type {
   RewriteBulletResponse,
 } from '@advance-academy/contracts'
 import type { AdminPersonProfile } from '@advance-academy/contracts/admin-person'
-import type { DreamCompanyInput, ProfileAnalysis, TargetRole, RoadmapResponse } from '@/types/dream-company'
 import type { LeadsFilters, LeadsListResponse } from '@/types/leads'
 import type {
   AdminUserPatch,
@@ -57,39 +56,6 @@ export function getDreamCompanyConfigFromBackend(authToken?: string) {
     method: 'GET',
     headers: authHeaders(authToken),
     timeoutMs: 10000,
-  })
-}
-
-export function analyzeProfileWithBackend(payload: { profile: DreamCompanyInput }, authToken?: string) {
-  const { backendUrl } = getServerEnv()
-
-  return fetchJson<ProfileAnalysis>(`${backendUrl}/api/dream-company/analyze`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-    headers: authHeaders(authToken),
-    timeoutMs: 60000,
-  })
-}
-
-export function generateRolesWithBackend(payload: { profile: DreamCompanyInput; analysis: ProfileAnalysis }, authToken?: string) {
-  const { backendUrl } = getServerEnv()
-
-  return fetchJson<TargetRole[]>(`${backendUrl}/api/dream-company/roles`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-    headers: authHeaders(authToken),
-    timeoutMs: 120000,
-  })
-}
-
-export function generateRoadmapWithBackend(payload: { profile: DreamCompanyInput; analysis: ProfileAnalysis; selectedRoles: TargetRole[] }, authToken?: string) {
-  const { backendUrl } = getServerEnv()
-
-  return fetchJson<RoadmapResponse>(`${backendUrl}/api/dream-company/roadmap`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-    headers: authHeaders(authToken),
-    timeoutMs: 180000,
   })
 }
 
@@ -330,16 +296,6 @@ export function mergeBulletsWithBackend(payload: { sourceBulletId: string; targe
   })
 }
 
-export function backfillEmbeddingsWithBackend(authToken?: string) {
-  const { backendUrl } = getServerEnv()
-  return fetchJson<{ updated: number }>(`${backendUrl}/api/cv-library/backfill-embeddings`, {
-    method: 'POST',
-    body: JSON.stringify({}),
-    headers: authHeaders(authToken),
-    timeoutMs: 300000,
-  })
-}
-
 export function skipGapWithBackend(gapId: string, authToken?: string) {
   const { backendUrl } = getServerEnv()
   return fetchJson<{ ok: true }>(`${backendUrl}/api/cv-library/gaps/${gapId}/skip`, {
@@ -403,15 +359,6 @@ export function getInterviewSessionWithBackend(id: string, authToken?: string) {
     headers: authHeaders(authToken),
     timeoutMs: 15000,
   })
-}
-
-export function transcribeInterviewAudioWithBackend(formData: FormData, authToken?: string) {
-  const { backendUrl } = getServerEnv()
-  return fetchFormDataJson<{ text: string }>(
-    `${backendUrl}/api/interview/transcribe`,
-    formData,
-    { timeoutMs: 60000, headers: authHeaders(authToken) },
-  )
 }
 
 // ── Coach Understanding Reports ──────────────────────────────────────────────

@@ -120,33 +120,3 @@ export async function fetchActiveJobs(companyId: string): Promise<Job[]> {
     return bTime - aTime;
   });
 }
-
-export interface PublicStats {
-  companies: number;
-  liveJobs: number;
-}
-
-/**
- * Headline counts for the landing page. Uses `head: true` so Supabase returns
- * the count without transferring any rows. Counts are best-effort: a failure
- * here must not take the landing page down, so errors collapse to zero and the
- * caller simply omits the figure.
- */
-export async function fetchPublicStats(): Promise<PublicStats> {
-  const supabase = getSupabaseClient();
-
-  const [companies, jobs] = await Promise.all([
-    supabase
-      .from("public_company_summary")
-      .select("id", { count: "exact", head: true }),
-    supabase
-      .from("jobs")
-      .select("id", { count: "exact", head: true })
-      .eq("is_active", true),
-  ]);
-
-  return {
-    companies: companies.error ? 0 : companies.count ?? 0,
-    liveJobs: jobs.error ? 0 : jobs.count ?? 0,
-  };
-}

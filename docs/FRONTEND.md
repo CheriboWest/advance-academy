@@ -32,7 +32,7 @@ The frontend is the Next.js application at the repo root. It is a single-page Ap
 │   └── api/                          Proxy routes (server-only)
 │       ├── cv-optimizer/analyze/route.ts
 │       ├── cv-optimizer/jobs/[jobId]/route.ts
-│       ├── dream-company/generate/route.ts
+│       ├── dream-company/{analyze,roles,roadmap}/stream/route.ts  (SSE, via proxyStream)
 │       ├── dream-company/parse-cv/route.ts
 │       ├── outreach/generate/route.ts
 │       ├── outreach/extract/route.ts
@@ -42,7 +42,7 @@ The frontend is the Next.js application at the repo root. It is a single-page Ap
 │       ├── interview/sessions/[id]/route.ts            (proxy: detail)
 │       ├── interview-prep/extract-job-from-url/route.ts (proxy: Jina + LLM)
 │       ├── evaluate/route.ts                           (proxy: final report)
-│       ├── cv-library/                                  (proxies: versions — two-phase upload, bullets/:id/similar, bullets/merge, gaps, jit-clarification, backfill-embeddings)
+│       ├── cv-library/                                  (proxies: versions — two-phase upload, bullets/:id/similar, bullets/merge, gaps, jit-clarification)
 │       └── coach-understanding/                         (proxies: generate, reports, reports/:id)
 ├── features/                         Feature modules
 │   ├── home/                         Landing page
@@ -64,7 +64,7 @@ The frontend is the Next.js application at the repo root. It is a single-page Ap
 ├── components/
 │   ├── navigation.tsx                Sticky header
 │   ├── ornamental-divider.tsx
-│   └── ui/                           shadcn/ui primitives (~59 files)
+│   └── ui/                           shadcn/ui primitives (only the ones in use; add more with the shadcn CLI)
 ├── types/                            Cross-feature TS types
 │   ├── dream-company.ts
 │   └── outreach.ts
@@ -121,22 +121,22 @@ features/dream-company/
 
 - `'use client'`.
 - One function per endpoint.
-- Calls **relative** URLs (`/api/dream-company/generate`), which hit the Next.js proxy routes.
+- Calls **relative** URLs (`/api/outreach/generate`), which hit the Next.js proxy routes.
 - Uses `fetchJson` or `fetchFormDataJson` from `shared/api/http-client.ts`.
 - Never imports `backend-client.ts`, never reads env vars directly.
 
-Example from `features/dream-company/api/frontend-client.ts`:
+Example from `features/outreach/api/frontend-client.ts`:
 
 ```ts
-'use client'
+import { fetchJson } from '@/shared/api/http-client'
+import { getAuthHeaders } from '@/shared/auth/get-auth-headers'
 
-import { fetchJson, fetchFormDataJson } from '@/shared/api/http-client'
-
-export async function generateDreamCompanies(profile: DreamCompanyInput) {
-  return fetchJson<DreamCompanyResult>('/api/dream-company/generate', {
+export async function submitOutreachGeneration(request: OutreachRequest): Promise<OutreachResult> {
+  return fetchJson<OutreachResult>('/api/outreach/generate', {
     method: 'POST',
-    body: JSON.stringify({ profile }),
-    timeoutMs: 120000,
+    body: JSON.stringify(request),
+    headers: await getAuthHeaders(),
+    timeoutMs: 100000,
   })
 }
 ```
@@ -155,31 +155,33 @@ Two layers, **do not mix them**:
 ### `shared/api/backend-client.ts` (server-only)
 
 - Reads `BACKEND_URL` via `getServerEnv()`.
-- One function per backend endpoint (`analyzeCvWithBackend`, `generateDreamCompaniesWithBackend`, etc.).
+- One function per backend endpoint (`analyzeCvWithBackend`, `generateOutreachWithBackend`, etc.).
 - **Only imported from `app/api/*/route.ts`.** Importing it from a `'use client'` file will bundle `BACKEND_URL` into the browser and defeat the whole point.
 
 ## Next.js proxy routes
 
 Every feature has one or more proxy routes at `app/api/{feature}/*/route.ts`. They are thin: validate → call backend-client → map errors.
 
-Canonical example: `app/api/dream-company/generate/route.ts`:
+Canonical example: `app/api/outreach/generate/route.ts`:
 
 ```ts
+import { getProxyAuthToken } from '@/shared/api/proxy-auth'
 import { NextResponse } from 'next/server'
-import { generateDreamCompaniesWithBackend } from '@/shared/api/backend-client'
+import { generateOutreachWithBackend } from '@/shared/api/backend-client'
 import { HttpClientError } from '@/shared/api/http-client'
 
 export async function POST(request: Request) {
   try {
     const json: unknown = await request.json()
-    if (!isDreamCompanyPayload(json)) {
+    if (!isOutreachRequest(json)) {
       return NextResponse.json(
-        { code: 'INVALID_REQUEST', message: 'Request body must include a profile object.' },
+        { code: 'INVALID_REQUEST', message: 'Request body must match outreach payload shape.' },
         { status: 400 },
       )
     }
 
-    const response = await generateDreamCompaniesWithBackend(json)
+    const authToken = getProxyAuthToken(request)
+    const response = await generateOutreachWithBackend(json, authToken)
     return NextResponse.json(response)
   } catch (error) {
     if (error instanceof HttpClientError) {

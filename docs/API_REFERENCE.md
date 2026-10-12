@@ -150,66 +150,25 @@ Returns the current status of an analysis job. The frontend polls this every `15
 
 ## Dream Company
 
-### `POST /api/dream-company/generate`
+### `POST /api/dream-company/{analyze,roles,roadmap}/stream`
 
-Generates a full career intelligence report. This is the 4-step pipeline (profile analysis → company matrix → target roles → career roadmap). Typical latency: 60–120 seconds.
+The three steps of the run, each streamed as Server-Sent Events. This is what the frontend calls.
 
-**Request body**
+| Step | Body | `done` payload |
+|---|---|---|
+| `analyze/stream` | `{ profile: DreamCompanyInput }` | `ProfileAnalysis` |
+| `roles/stream` | `{ profile, analysis }` | `TargetRole[]` |
+| `roadmap/stream` | `{ profile, analysis, selectedRoles }` | `RoadmapResponse` |
 
-```ts
-{
-  profile: {
-    degree: string
-    workExperience: string
-    skills: string
-    interests: string
-    targetSalary: string
-    location: string
-  }
-}
-```
+Events are `open`, `delta` (raw model text, progress only), `done` (the parsed result) and `error` (`{ status, code, message }`). Full contract: [`test/dream-company/M2.1-streaming-contract.md`](../test/dream-company/M2.1-streaming-contract.md). Types live in `types/dream-company.ts`.
 
-**Response 200**
+The backend also exposes the same three steps as plain JSON (`POST /api/dream-company/{analyze,roles,roadmap}`, same bodies, the `done` payload as the 200 response). The Next.js app does not proxy them; `test/dream-company/m1-ac-check.mjs` calls them directly.
 
-```ts
-{
-  profile: DreamCompanyInput
-  analysis: {
-    marketLevel: string
-    salaryRange: { min: number, max: number, currency: string }
-    strengths: string[]
-    gaps: string[]
-    readiness: string
-  }
-  matrix: {
-    tier1: Company[]   // ~7 stretch companies
-    tier2: Company[]   // ~7 target companies
-    tier3: Company[]   // ~6 safe companies
-  }
-  roles: Array<{
-    title: string
-    salary: { min: number, max: number, currency: string }
-    demand: string
-    fitReason: string
-  }>
-  roadmap: {
-    phases: Array<{
-      name: string
-      durationWeeks: number
-      actions: string[]
-    }>
-  }
-  generatedAt: string    // ISO 8601
-}
-```
+**Errors** — `400` missing profile fields / analysis / roles; `429` daily limit or `CREDIT_EXHAUSTED` (step 1); `502` model 404 or truncated output; `503` `LLM_API_KEY` not set; `504` timeout.
 
-**Errors**
+### `GET /api/dream-company/config`
 
-- `400` — missing required profile fields.
-- `401` — Anthropic rejected the API key.
-- `500 { error, step }` — LLM response parse failure at a specific pipeline step.
-- `502` — Anthropic returned 404 for the configured model (set `LLM_MODEL_DREAM_COMPANY`).
-- `503` — `LLM_API_KEY` not set.
+`{ maxRoles: number }` — the role-selection cap (`JOB_MAX_ROLE_QUERIES`).
 
 ### `POST /api/dream-company/parse-cv`
 
@@ -336,7 +295,8 @@ The frontend hits these paths on **its own origin** (Next.js, port 3000 in dev).
 |---|---|
 | `/api/cv-optimizer/analyze` | `/api/cv-optimizer/analyze` |
 | `/api/cv-optimizer/jobs/:jobId` | `/api/cv-optimizer/jobs/:jobId` |
-| `/api/dream-company/generate` | `/api/dream-company/generate` |
+| `/api/dream-company/{analyze,roles,roadmap}/stream` | same path |
+| `/api/dream-company/config` | `/api/dream-company/config` |
 | `/api/dream-company/parse-cv` | `/api/dream-company/parse-cv` |
 | `/api/outreach/generate` | `/api/outreach/generate` |
 | `/api/outreach/extract` | `/api/outreach/extract` |

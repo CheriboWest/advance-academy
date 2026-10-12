@@ -274,7 +274,7 @@ export async function POST(request: Request) {
 }
 ```
 
-Again, copied from `app/api/dream-company/generate/route.ts`. Same shape, different names.
+Again, copied from `app/api/outreach/generate/route.ts`. Same shape, different names.
 
 ### Step 12: Write the frontend client
 

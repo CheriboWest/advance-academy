@@ -4,6 +4,10 @@
  * Drives the REAL HTTP surface (production frontend proxy by default) and grades each
  * prod-safe M1 acceptance criterion. Prints an AC-by-AC pass/fail matrix.
  *
+ * It calls the JSON steps (/analyze, /roles, /roadmap). This repo's Next.js app only
+ * proxies their /stream variants, so against a frontend built from here point --base at
+ * the backend instead.
+ *
  * Auth: mints a throwaway Supabase user (service-role admin API) to get a real bearer
  * token, then deletes it. No app code is imported; nothing is left behind.
  *

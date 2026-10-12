@@ -92,8 +92,9 @@ If you set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, also apply the migrat
 Verify end-to-end (Dream Company):
 
 ```bash
-curl -X POST http://localhost:4000/api/dream-company/generate \
+curl -X POST http://localhost:4000/api/dream-company/analyze \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <supabase access token>" \
   -d '{"profile":{"degree":"CS","workExperience":"2 years frontend","skills":"React, TS","interests":"AI","targetSalary":"80k","location":"Remote"}}'
 ```
 
@@ -121,7 +122,7 @@ This is intentional so contributors can work on the CV Optimizer UI without need
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `401` from `/api/dream-company/generate` | `LLM_API_KEY` wrong | Check `backend/.env` — the key is rejected by Anthropic |
+| `401` from `/api/dream-company/analyze` with a valid token | `LLM_API_KEY` wrong | Check `backend/.env` — the key is rejected by Anthropic |
 | `502` mentioning "404 for the configured model" | Model name wrong or your account can't use it | Set `LLM_MODEL_DREAM_COMPANY` (or the feature-specific var) to a model your account has access to |
 | CORS error in browser devtools | `FRONTEND_URL` mismatch | Match `backend/.env` `FRONTEND_URL` to where the browser is loaded from, including protocol and port |
 | `413` / "File too large" on CV upload | File exceeds 15 MB limit | `@fastify/multipart` is capped at 15 MB in `backend/src/routes/dream-company.ts` |

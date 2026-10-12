@@ -142,42 +142,6 @@ export interface InterviewSession {
   finalReport?: FeedbackReport
 }
 
-// API DTOs
-
-export interface StartSessionRequest {
-  personaId: PersonaId
-  context: InterviewContext
-}
-
-export interface StartSessionResponse {
-  sessionId: string
-  openingQuestion: string
-  dbSessionId?: string
-  questionId?: string
-}
-
-export interface SendMessageRequest {
-  sessionId: string
-  content: string
-  messageHistory: Array<{ role: 'interviewer' | 'candidate'; content: string }>
-  personaId: PersonaId
-  context: InterviewContext
-  dbSessionId?: string
-  questionId?: string
-}
-
-export interface SendMessageResponse {
-  reply: string
-  irsScore: IRSScore
-  isComplete: boolean
-  assessmentId?: string
-  nextQuestionId?: string
-}
-
-export interface EvaluateSessionResponse {
-  report: FeedbackReport
-}
-
 // History view DTOs
 
 export interface SessionListItem {

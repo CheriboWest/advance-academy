@@ -73,6 +73,3 @@ Questions include "Tell me about a time you had to navigate a difficult team dyn
 wrap up with enthusiasm.`,
   },
 ]
-
-export const getPersona = (id: string): InterviewerPersona | undefined =>
-  PERSONAS.find((p) => p.id === id)

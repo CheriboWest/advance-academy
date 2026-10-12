@@ -268,7 +268,6 @@ In [shared/api/backend-client.ts](../shared/api/backend-client.ts):
 - `getCvBulletsWithBackend(id)`
 - `finalizeCvVersionWithBackend(id, payload)` ⭐
 - `findSimilarBulletsWithBackend(bulletId)` ⭐, `mergeBulletsWithBackend({ sourceBulletId, targetBulletId })` ⭐
-- `backfillEmbeddingsWithBackend()` ⭐
 - `addGapArtifactWithBackend(gapId, { text|url })`, `addGapArtifactFileWithBackend(gapId, formData)`
 - `skipGapWithBackend(gapId)`, `jitClarificationWithBackend({ bulletId, question, answer })`
 - `coachAnswerWithBackend({ question, answer, context, cvVersionId?, irsScore? })`

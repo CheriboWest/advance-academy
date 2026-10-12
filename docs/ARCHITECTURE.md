@@ -59,7 +59,7 @@ All AI features are powered by Anthropic Claude. **Persistence:** Interview Prep
 
 ## The 4-layer request flow
 
-Every feature request travels through the same four layers. The Dream Company "generate" flow is the canonical example:
+Every feature request travels through the same four layers. The Outreach "generate" flow is the canonical example:
 
 ```mermaid
 sequenceDiagram
@@ -74,20 +74,20 @@ sequenceDiagram
     participant LLM as Anthropic Claude
 
     User->>UI: Submit form
-    UI->>Hook: generateFromProfile(profile)
-    Hook->>FC: generateDreamCompanies(profile)
-    FC->>Proxy: POST /api/dream-company/generate
-    Proxy->>BC: generateDreamCompaniesWithBackend(payload)
-    BC->>BE: POST ${BACKEND_URL}/api/dream-company/generate
-    BE->>Svc: generateDreamCompanyReport(profile)
-    Svc->>LLM: Anthropic SDK (4 sequential calls)
+    UI->>Hook: generateMutation.mutate(request)
+    Hook->>FC: submitOutreachGeneration(request)
+    FC->>Proxy: POST /api/outreach/generate
+    Proxy->>BC: generateOutreachWithBackend(payload, token)
+    BC->>BE: POST ${BACKEND_URL}/api/outreach/generate
+    BE->>Svc: generateOutreach(body)
+    Svc->>LLM: Anthropic SDK
     LLM-->>Svc: JSON responses
-    Svc-->>BE: DreamCompanyResult
+    Svc-->>BE: OutreachResult
     BE-->>BC: 200 application/json
-    BC-->>Proxy: DreamCompanyResult
+    BC-->>Proxy: OutreachResult
     Proxy-->>FC: NextResponse.json(result)
-    FC-->>Hook: DreamCompanyResult
-    Hook-->>UI: setResult(data)
+    FC-->>Hook: OutreachResult
+    Hook-->>UI: setResults(data)
     UI-->>User: Render result
 ```
 

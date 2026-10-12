@@ -49,18 +49,6 @@ export interface Job {
   source_url?: string | null;
 }
 
-/**
- * A row from the `coach_company_meta` table — private, per-coach metadata for a
- * company. Protected by RLS keyed to `coach_user_id = auth.uid()`.
- */
-export interface CoachCompanyMeta {
-  coach_user_id: string;
-  company_id: string;
-  starred: boolean;
-  hidden: boolean;
-  notes: string | null;
-}
-
 /** A company summary merged with the current coach's private metadata. */
 export interface CoachCompanyRow {
   company_id: string;
