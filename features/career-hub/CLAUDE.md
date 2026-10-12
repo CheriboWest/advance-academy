@@ -36,6 +36,9 @@ everything else is here. Data comes from **backend-python**, not Fastify.
 
 - `isCoach()` in `lib/coach.ts` asks Fastify (`/api/account/me`) so the
   `ADMIN_USER_IDS` allowlist counts; `app/coach/(workspace)/layout.tsx` gates on it.
+- Sponsored Companies pages server-side: backend-python `GET /sponsors/companies`
+  → SQL `coach_company_page` (migration 048), licensed sponsors by default, with
+  contact counts. Don't go back to loading every company into the page.
 - Contacts: coaches manage them via backend-python (`/contacts`); students on
   Membership see a reduced shape (no phone/notes) via Fastify on `/companies/[slug]`.
   `SECTOR_OPTIONS` in `lib/filters.ts` must match `backend-python/app/companies/sector.py`.

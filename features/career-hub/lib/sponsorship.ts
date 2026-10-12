@@ -3,6 +3,7 @@ import { careerHubApiUrl } from "@/features/career-hub/lib/api-url";
 import type {
   CompanySponsorshipStatus,
   CompanySponsorshipStatusCompact,
+  SponsoredCompanyPage,
   SponsorshipStats,
 } from "@/features/career-hub/lib/types";
 
@@ -142,4 +143,64 @@ export async function getSponsorshipStatuses(
   } catch {
     return {};
   }
+}
+
+/**
+ * One page of the coach Sponsored Companies list (GET /sponsors/companies,
+ * migration 048): filtered, paged and counted in SQL, with contact counts.
+ * Throws on failure so the page can show its error state.
+ */
+export async function getSponsoredCompanyPage(params: {
+  scope: "licensed" | "all";
+  q: string;
+  page: number;
+}): Promise<SponsoredCompanyPage> {
+  const baseUrl = careerHubApiUrl();
+  if (!baseUrl) throw new Error("The Career Hub API is not configured.");
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Your session has expired. Sign in again.");
+
+  const query = new URLSearchParams({
+    scope: params.scope,
+    q: params.q,
+    page: String(params.page),
+  });
+  const response = await fetch(`${baseUrl}/sponsors/companies?${query}`, {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Could not load companies (${response.status}).`);
+  const data = (await response.json()) as {
+    companies: Array<{
+      id: string;
+      slug: string;
+      name: string;
+      sector: string | null;
+      region: string | null;
+      hq_location: string | null;
+      lead_score: number | null;
+      open_jobs: number;
+      contacts: number;
+    }>;
+    total: number;
+    page_size: number;
+  };
+  return {
+    total: data.total,
+    page_size: data.page_size,
+    companies: data.companies.map((c) => ({
+      company_id: c.id,
+      slug: c.slug,
+      name: c.name,
+      location: c.hq_location ?? c.region ?? "—",
+      sector: c.sector,
+      open_jobs: c.open_jobs,
+      lead_score: c.lead_score ?? 0,
+      contacts: c.contacts,
+    })),
+  };
 }

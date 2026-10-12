@@ -72,6 +72,13 @@ export interface SponsoredCompanyRow {
   lead_score: number;
 }
 
+/** One page of the coach Sponsored Companies list (GET /sponsors/companies). */
+export interface SponsoredCompanyPage {
+  companies: Array<SponsoredCompanyRow & { contacts: number }>;
+  total: number;
+  page_size: number;
+}
+
 /** Company context shown on the Sponsored Company detail page's overview,
  *  and reused as the Outreach research panel's company summary. */
 export interface SponsoredCompanyContext {

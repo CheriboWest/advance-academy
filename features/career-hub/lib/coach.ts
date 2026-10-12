@@ -295,30 +295,23 @@ const SPONSORED_COMPANY_COLUMNS =
   `${SPONSORED_COMPANY_LIST_COLUMNS}, ai_summary, ai_summary_generated_at`;
 
 /**
- * All companies for the Sponsored Companies list. Also the company set the
- * Outreach placeholder's "choose a company" step reuses — see
- * app/coach/(workspace)/outreach/page.tsx — so this stays free of anything
- * Sponsored-Companies-specific (sponsorship status and contact counts are
- * fetched separately and merged in by each page, not baked in here).
+ * Companies hiring, for the Outreach "choose a company" step
+ * (app/coach/(workspace)/outreach/new). The Sponsored Companies list pages
+ * server-side through backend-python instead (GET /sponsors/companies).
  */
 export async function getSponsoredCompanies(): Promise<SponsoredCompanyRow[]> {
   const supabase = await createSupabaseServerClient();
 
-  // Concurrent, not sequential. The hidden set used to be awaited first purely
-  // so the companies query could be narrowed with `not.in`, which put two
-  // round trips to Supabase in series at the very front of a page that shows
-  // nothing until both have landed. Excluding the hidden ids in JS instead
-  // lets the two overlap.
-  //
-  // ponytail: this fetches the coach's hidden companies only to drop them,
-  // so the row count crossing the wire is the *unfiltered* company set,
-  // paged past PostgREST's 1000-row cap by selectAll.
+  // ponytail: fetches the coach's hidden companies only to drop them in JS, and
+  // pages every hiring company past PostgREST's 1000-row cap; move this picker
+  // to the paged endpoint if it gets slow.
   const [hiddenIds, data] = await Promise.all([
     getHiddenCompanyIds(supabase),
     selectAll((from, to) =>
       supabase
         .from("public_company_summary")
         .select(SPONSORED_COMPANY_LIST_COLUMNS)
+        .gt("open_jobs", 0) // hiring companies, as before migration 048
         .order("name", { ascending: true })
         .order("id")
         .range(from, to)

@@ -210,6 +210,48 @@ async def sponsorship_stats(
     return SponsorshipStatsResponse(licensed_companies=licensed or 0)
 
 
+COMPANY_PAGE_SIZE = 30
+
+
+@router.get("/companies", response_model=dict)
+async def sponsored_company_page(
+    scope: str = Query("licensed", pattern="^(licensed|all)$"),
+    q: str = Query("", max_length=100),
+    page: int = Query(1, ge=1),
+    user_id: str = Depends(get_current_user),
+) -> dict:
+    """One page of the coach Sponsored Companies list (migration 048's
+    `coach_company_page`): confirmed sponsors (`company_sponsorship_current`)
+    by default or every company with `scope=all`, a name search, this coach's
+    hidden companies left out, each row with its contact count, plus the total.
+
+    Replaces the list downloading every company and then sending every id
+    back as a `?company_ids=` URL for the contact counts.
+    """
+    settings = get_settings()
+    rest = _require_supabase(settings)
+
+    async with httpx.AsyncClient() as client:
+        rows = await rest.rpc(
+            client,
+            "coach_company_page",
+            {
+                "p_coach": user_id,
+                "p_licensed": scope == "licensed",
+                "p_q": q.strip() or None,
+                "p_offset": (page - 1) * COMPANY_PAGE_SIZE,
+                "p_limit": COMPANY_PAGE_SIZE,
+            },
+        )
+
+    rows = rows or []
+    return {
+        "companies": [{k: v for k, v in row.items() if k != "total"} for row in rows],
+        "total": rows[0]["total"] if rows else 0,
+        "page_size": COMPANY_PAGE_SIZE,
+    }
+
+
 @router.post("/companies/statuses", response_model=dict[str, CompanySponsorshipStatusCompact])
 async def bulk_company_sponsorship_statuses(
     body: SponsorshipStatusBatchRequest,

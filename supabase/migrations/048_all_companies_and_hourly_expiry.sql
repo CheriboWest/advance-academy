@@ -19,6 +19,13 @@
 --  3. close_expired_jobs() is scheduled hourly with pg_cron (the line 046 left
 --     commented out), so `is_active` catches up without a crawl. Skipped with a
 --     notice where pg_cron isn't available (local test clusters).
+--
+--  4. coach_company_page(): one page of the coach Sponsored Companies list,
+--     filtered in SQL (confirmed sponsors only by default, name search, the
+--     coach's hidden companies left out) with contact counts and the total.
+--     It replaces downloading every company and sending every id back in a
+--     ~20 KB `?company_ids=` URL for the counts. Service role only; the coach
+--     check is backend-python's (/sponsors/companies).
 -- ============================================================================
 
 -- ── 1 + 2. The view ─────────────────────────────────────────────────────────
@@ -66,5 +73,56 @@ begin
   create extension if not exists pg_cron;
   -- cron.schedule with an existing job name updates that job, so re-running is safe.
   perform cron.schedule('close-expired-jobs', '7 * * * *', 'select public.close_expired_jobs()');
+end
+$$;
+
+-- ── 4. Coach Sponsored Companies, one page ──────────────────────────────────
+create or replace function public.coach_company_page(
+  p_coach    uuid,
+  p_licensed boolean,
+  p_q        text    default null,
+  p_offset   integer default 0,
+  p_limit    integer default 30
+)
+returns table (
+  id          uuid,
+  slug        text,
+  name        text,
+  sector      text,
+  region      text,
+  hq_location text,
+  lead_score  integer,
+  open_jobs   bigint,
+  contacts    bigint,
+  total       bigint
+)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select s.id, s.slug, s.name, s.sector, s.region, s.hq_location, s.lead_score, s.open_jobs,
+         (select count(*) from public.contacts k where k.company_id = s.id),
+         count(*) over ()
+    from public.public_company_summary s
+   where (not p_licensed
+          or exists (select 1 from public.company_sponsorship_current c where c.company_id = s.id))
+     and (p_q is null or s.name ilike '%' || p_q || '%')
+     and not exists (select 1 from public.coach_company_meta m
+                      where m.company_id = s.id and m.coach_user_id = p_coach and m.hidden)
+   order by s.name, s.id
+  offset greatest(p_offset, 0)
+   limit least(greatest(p_limit, 1), 100)
+$$;
+
+revoke all on function public.coach_company_page(uuid, boolean, text, integer, integer) from public;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke all on function public.coach_company_page(uuid, boolean, text, integer, integer) from anon, authenticated;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.coach_company_page(uuid, boolean, text, integer, integer) to service_role;
+  end if;
 end
 $$;

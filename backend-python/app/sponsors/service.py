@@ -124,28 +124,47 @@ async def companies_needing_resolution(
     if company_ids is not None:
         if not company_ids:
             return []
-        checks = await checks_for(client, rest, company_ids)
-        pool = list(company_ids)
-    else:
-        # PostgREST caps a response at COMPANY_PAGE rows whatever `limit` says,
-        # so page with offset; `id` breaks created_at ties so pages don't overlap.
-        pool = []
-        while len(pool) < limit * 4:
-            rows = await rest.select(
-                client,
-                "companies",
-                {
-                    "select": "id",
-                    "order": "created_at.desc,id",
-                    "limit": str(min(COMPANY_PAGE, limit * 4 - len(pool))),
-                    "offset": str(len(pool)),
-                },
-            )
-            pool.extend(str(row["id"]) for row in rows)
-            if len(rows) < COMPANY_PAGE:
-                break
-        checks = await checks_for(client, rest, pool) if pool else {}
+        return _stale_ids(
+            company_ids, await checks_for(client, rest, company_ids), current_import, limit
+        )
 
+    # Walk every company, newest first, one PostgREST page (COMPANY_PAGE rows,
+    # its cap) at a time, until `limit` stale ones are found. This used to look
+    # only at the newest `limit * 4` companies, so once those were checked older
+    # ones were never reached and stayed "Not checked". `id` breaks created_at
+    # ties so pages don't overlap.
+    stale: list[str] = []
+    offset = 0
+    while len(stale) < limit:
+        rows = await rest.select(
+            client,
+            "companies",
+            {
+                "select": "id",
+                "order": "created_at.desc,id",
+                "limit": str(COMPANY_PAGE),
+                "offset": str(offset),
+            },
+        )
+        page = [str(row["id"]) for row in rows]
+        if page:
+            stale += _stale_ids(
+                page, await checks_for(client, rest, page), current_import, limit - len(stale)
+            )
+        if len(rows) < COMPANY_PAGE:
+            break
+        offset += len(rows)
+    return stale
+
+
+def _stale_ids(
+    pool: list[str],
+    checks: dict[str, dict[str, Any]],
+    current_import: Optional[str],
+    limit: int,
+) -> list[str]:
+    """The ids in `pool` whose check is missing, from an older register
+    edition, or an error still under its retry budget — at most `limit`."""
     stale: list[str] = []
     for company_id in pool:
         check = checks.get(str(company_id))
