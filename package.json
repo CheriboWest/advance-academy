@@ -18,8 +18,11 @@
     "start": "next start",
     "start:frontend": "next start",
     "start:backend": "npm run start --workspace backend",
-    "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspace backend",
+    "test:python": "cd backend-python && for f in test_*.py; do out=$(.venv/bin/python \"$f\" 2>&1) || { echo \"FAIL $f\"; echo \"$out\"; exit 1; }; done && echo \"python self-checks passed\"",
+    "test:all": "npm test && npm run test --workspace backend && npm run test:python",
+    "check": "npm run typecheck && npm run test:all"
   },
   "dependencies": {
     "@advance-academy/contracts": "*",
