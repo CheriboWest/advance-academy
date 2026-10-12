@@ -20,7 +20,7 @@
     python scripts/import_sponsor_register.py
 
 Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the environment (or in
-apps/api/.env) unless --dry-run or --inspect-batch is used. Safe to run
+backend-python/.env) unless --dry-run or --inspect-batch is used. Safe to run
 repeatedly: rows are keyed by their register identity, and an edition only
 becomes current once every batch has landed.
 

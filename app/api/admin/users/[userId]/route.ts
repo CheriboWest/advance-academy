@@ -2,14 +2,14 @@ import { getProxyAuthToken } from '@/shared/api/proxy-auth'
 import { NextResponse } from 'next/server'
 import { patchAdminUserOnBackend } from '@/shared/api/backend-client'
 import { HttpClientError } from '@/shared/api/http-client'
-import type { AdminUserPatch, Tier } from '@/types/admin'
+import type { AdminUserPatch, Tier } from '@advance-academy/contracts/admin'
 
 const TIERS: Tier[] = ['trial', 'membership']
 // 'pending' is the DB default, not a decision an admin submits.
 const REVIEW_DECISIONS = ['approved', 'rejected'] as const
 
 // Validate here as well as on the backend — the proxy layer owns request-shape
-// checks so a malformed body never reaches Fastify (see docs/ARCHITECTURE.md).
+// checks so a malformed body never reaches Fastify (see app/api/CLAUDE.md).
 function toPatch(body: unknown): AdminUserPatch | null {
   if (!body || typeof body !== 'object') return null
   const b = body as Record<string, unknown>

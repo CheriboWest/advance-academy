@@ -107,29 +107,6 @@ export async function saveSessionNotes(
   )
 }
 
-// ── One-click mock (ticket T7) ──────────────────────────────────────────────
-
-/** Interview Lab setup derived from an approved pack, question bank included. */
-export interface MockContextResponse {
-  context: {
-    coachingSessionId: string
-    cvText: string
-    jobTitle: string
-    jobDescription: string
-    companyName: string
-    companyUrl: string
-    extraLinks: string[]
-    questionBank: string[]
-  }
-}
-
-export async function getMockContext(sessionId: string): Promise<MockContextResponse> {
-  return fetchJson<MockContextResponse>(
-    `/api/coaching/sessions/${encodeURIComponent(sessionId)}/mock`,
-    { method: 'GET', headers: await getAuthHeaders(), timeoutMs: 15000 },
-  )
-}
-
 export interface PracticeRun {
   id: string
   label: string | null

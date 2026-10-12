@@ -35,7 +35,7 @@ const SOURCE_OPTIONS = [
   { key: "reed", label: "Reed" },
 ] as const;
 
-// Mirrors MAX_PAIRS_PER_RUN in apps/api/app/routers/discover.py. Checked here
+// Mirrors MAX_PAIRS_PER_RUN in backend-python/app/routers/discover.py. Checked here
 // too so an over-long list is caught before a round trip, not after; the API
 // still enforces it, this is only for the message.
 const MAX_PAIRS_PER_RUN = 25;

@@ -13,7 +13,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { useOutreach } from '@/features/outreach/hooks/use-outreach'
 import type { ManualContextLink, OutreachFormData } from '@/features/outreach/types'
-import type { EnrichmentCard, ExperienceLevel, OutreachIntent } from '@/types/outreach'
+import type { EnrichmentCard, ExperienceLevel, OutreachIntent } from '@advance-academy/contracts/outreach'
 import { extractOutreachSource, validateJdUrl } from '@/features/outreach/api/frontend-client'
 import { EnrichmentPanel } from './enrichment-panel'
 import { ManualContextManager } from './manual-context-manager'

@@ -13,7 +13,7 @@ import {
   generateTargetRoles,
   generateRoadmapWithJobs,
 } from '../../backend/src/services/dream-company.service.js';
-import type { DreamCompanyInput } from '../../backend/src/types/dream-company.js';
+import type { DreamCompanyInput } from '@advance-academy/contracts/dream-company';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '../..');

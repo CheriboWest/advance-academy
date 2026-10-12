@@ -1,6 +1,7 @@
 import { getSupabase } from './supabase.js';
 
-export type UserStatus = 'pending' | 'approved' | 'rejected';
+import type { UserStatus } from '@advance-academy/contracts/admin';
+export type { UserStatus };
 
 // ponytail: 60s in-memory Map, one PK lookup per user per minute. Approvals take
 // effect within a minute, which is fine for a human-reviewed queue. Move to Redis

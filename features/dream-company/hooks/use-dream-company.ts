@@ -7,7 +7,7 @@ import type {
   TargetRole,
   ExaJobListing,
   CareerRoadmap,
-} from '@/types/dream-company'
+} from '@advance-academy/contracts/dream-company'
 import { analyzeProfileStream, generateRolesStream, generateRoadmapStream, parseCV, getDreamCompanyConfig } from '@/features/dream-company/api/frontend-client'
 
 // Fallback used only until the backend config loads; the backend value is authoritative.

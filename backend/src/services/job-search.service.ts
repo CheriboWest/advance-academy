@@ -17,7 +17,7 @@
  * Output `jobs` stays the unchanged `ExaJobListing[]`; an optional `meta` carries
  * diagnostics (source, window used, sparse, links checked) without touching consumers.
  */
-import type { ExaJobListing } from '../types/dream-company.js';
+import type { ExaJobListing } from '@advance-academy/contracts/dream-company';
 import type { CostBucket } from '../lib/cost-tracker.js';
 import { getExaClient, withExaRetry } from '../lib/exa-client.js';
 import { searchAdzuna, type AdzunaResult } from '../lib/adzuna-client.js';

@@ -1,13 +1,12 @@
 /**
- * Contract-safe fallbacks for the dormant CV Optimizer agents.
+ * Contract-safe fallbacks for the CV Optimizer V2 agents.
  *
  * One pure fallback per agent, returning the agent's narrow Out shape with
- * empty/neutral defaults. These are the per-agent failure substitutes the
- * future parallel orchestrator will use (e.g. analyzeStructure(input).catch(
- * fallbackStructure)) so one agent's failure does not collapse the whole result.
+ * empty/neutral defaults. buildLlmAnalysisV2 substitutes them per branch
+ * (e.g. analyzeStructure(input).catch(fallbackStructure)) so one agent's
+ * failure does not collapse the whole result.
  *
- * Pure: no logging, no retries, no throws, empty arrays (never null). Not wired
- * into any live path — nothing imports these yet.
+ * Pure: no logging, no retries, no throws, empty arrays (never null).
  */
 import type { StructureOut } from './structure.agent.js';
 import type { KeywordsOut } from './keywords.agent.js';

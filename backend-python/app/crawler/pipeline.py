@@ -271,7 +271,7 @@ async def _ingest(
             summary_column_available = False
             print(
                 "[ingest] companies.ai_summary is missing — apply "
-                "infra/supabase/migrations/0013_company_ai_summary.sql. "
+                "supabase/migrations/036_ch0013_company_ai_summary.sql. "
                 "Skipping the summary worklist for this crawl.",
                 flush=True,
             )

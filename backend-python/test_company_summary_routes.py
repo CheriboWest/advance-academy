@@ -22,7 +22,6 @@ from app.auth import get_current_user  # noqa: E402
 from app.companies import summarizer  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.main import app  # noqa: E402
-from app.crawler.supabase_rest import SupabaseRest  # noqa: E402
 
 get_settings.cache_clear()
 

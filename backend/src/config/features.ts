@@ -18,7 +18,7 @@ export function getCvOptimizerFeatures(): CvOptimizerFeatures {
 }
 
 /**
- * Gamification v2 (migration 047, docs/GAMIFICATION_V2.md). Off by default.
+ * Gamification v2 (migration 047, supabase/CLAUDE.md). Off by default.
  *
  * Off: job cards, statuses and cover letters are written as before, and the
  * weekly-tasks panel (migration 045) awards its points on read. On: those writes

@@ -18,7 +18,7 @@ import {
   JOBS_UNAVAILABLE_ERROR,
   noMatchesNotice,
 } from './job-search.service.js';
-import type { ExaJobListing } from '../types/dream-company.js';
+import type { ExaJobListing } from '@advance-academy/contracts/dream-company';
 
 // --- routing -------------------------------------------------------------
 

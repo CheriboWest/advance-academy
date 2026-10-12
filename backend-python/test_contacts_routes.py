@@ -9,9 +9,9 @@ means the request never reached this router's code; something upstream of
 the handler (path, method, or route registration) didn't match.
 
 Traced end to end on this branch:
-  - apps/web/lib/contacts-api.ts calls `POST {baseUrl}/contacts` (create),
+  - features/career-hub/lib/contacts-api.ts calls `POST {baseUrl}/contacts` (create),
     `PUT {baseUrl}/contacts/{id}` (update), `DELETE {baseUrl}/contacts/{id}`.
-  - apps/web/lib/contacts.ts calls `GET {baseUrl}/contacts?company_id=...`.
+  - features/career-hub/lib/contacts.ts calls `GET {baseUrl}/contacts?company_id=...`.
   - app/routers/contacts.py registers exactly those four routes under
     `APIRouter(prefix="/contacts")`.
   - app/main.py calls `app.include_router(contacts.router)`.
@@ -121,7 +121,7 @@ if CONTACTS_API_TS.exists():
           bool(delete_call) and delete_call.group(1) == "/contacts/${contactId}",
           f"got {delete_call.group(1) if delete_call else None!r}")
 else:
-    check("apps/web/lib/contacts-api.ts exists (path-agreement check)", False,
+    check("features/career-hub/lib/contacts-api.ts exists (path-agreement check)", False,
           f"not found at {CONTACTS_API_TS}")
 
 if CONTACTS_TS.exists():
@@ -183,7 +183,7 @@ if CONTACTS_TS.exists():
           "second direct call — one place constructs the company_ids= query",
           bool(re.search(r"getContactCounts[\s\S]*?await getContactsForCompanies\(", source)))
 else:
-    check("apps/web/lib/contacts.ts exists (path-agreement check)", False,
+    check("features/career-hub/lib/contacts.ts exists (path-agreement check)", False,
           f"not found at {CONTACTS_TS}")
 
 # ---------------------------------------------------------------------------

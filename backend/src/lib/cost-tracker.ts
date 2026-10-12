@@ -17,8 +17,8 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// Resolves to backend/cost-log.jsonl (3 levels up from src/lib/)
-const COST_LOG_PATH = join(__dirname, '..', '..', '..', 'cost-log.jsonl');
+// Resolves to backend/cost-log.jsonl (2 levels up from src/lib/ or dist/lib/)
+const COST_LOG_PATH = join(__dirname, '..', '..', 'cost-log.jsonl');
 
 interface ModelPricing {
   /** USD per 1,000,000 input tokens */

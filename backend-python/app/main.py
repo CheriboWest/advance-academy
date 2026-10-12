@@ -1,4 +1,4 @@
-"""FastAPI application entrypoint for the CareerHub UK backend."""
+"""FastAPI application entrypoint for the Career Hub service (backend-python)."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="CareerHub UK API",
+        title="Advance Academy Career Hub API",
         version=__version__,
-        description="Backend API for CareerHub UK. Currently provides AI outreach generation.",
+        description="Career Hub service: company and job search, the coach crawler, contacts, the sponsor register and outreach.",
     )
 
     # Allow the Vercel frontend origin(s) to call the API from the browser.

@@ -3,7 +3,8 @@
 --  Run in Supabase SQL Editor (Dashboard → SQL Editor → New query).
 --  Idempotent where Postgres allows it; additive only. Ships dark: nothing
 --  reads these tables until the backend runs with GAMIFICATION_V2_ENABLED=true.
---  Design and threat model: docs/GAMIFICATION_V2.md.
+--  Design and threat model: supabase/CLAUDE.md (summary); full write-up in
+--  `git show 062d0e5:docs/GAMIFICATION_V2.md`.
 --
 --  Depends on: 001 (users, interview_*), 005 + 018a (cv_analysis_jobs,
 --  tool_results.input_json), 015 (users.credit_balance / is_admin /
@@ -22,7 +23,7 @@
 --       or an audit row; an XP grant; streak, quest, achievement and coin rows.
 --    3. Nothing is ever awarded for reading a page.
 --
---  Privilege model (see the matrix in docs/GAMIFICATION_V2.md)
+--  Privilege model (matrix: `git show 062d0e5:docs/GAMIFICATION_V2.md`)
 --    * Four NOLOGIN, NOBYPASSRLS owner roles. Each SECURITY DEFINER function is
 --      owned by the narrowest one, with column-level grants and one RLS policy
 --      per (table, command, role). Source tables keep RLS on with no policies
@@ -91,7 +92,7 @@ alter table public.admin_actions add constraint admin_actions_action_check
 -- ---------------------------------------------------------------------------
 -- The reward economy, versioned. Every intent records the version it was
 -- captured under, so a config change never re-judges earlier actions. Values
--- are PROPOSED and await product approval (docs/GAMIFICATION_V2.md).
+-- are PROPOSED and await product approval (supabase/CLAUDE.md).
 create table if not exists public.gamification_config (
   version        integer primary key,
   jd_thin_chars  integer not null,

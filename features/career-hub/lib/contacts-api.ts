@@ -82,18 +82,6 @@ async function authFetch<T>(path: string, init: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** A company's contacts, fetched client-side — for an interactive picker
- *  (e.g. the Outreach placeholder's "choose a contact" step) that needs to
- *  load a different company's contacts on selection, without a page
- *  round-trip. For the initial list on page load, prefer the server-side
- *  lib/contacts.ts (no client-server waterfall). */
-export function listContactsViaApi(companyId: string): Promise<Contact[]> {
-  return authFetch<Contact[]>(
-    `/contacts?company_id=${encodeURIComponent(companyId)}`,
-    { method: "GET" }
-  );
-}
-
 export function createContactViaApi(
   companyId: string,
   input: ContactInput

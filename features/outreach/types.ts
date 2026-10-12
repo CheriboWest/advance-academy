@@ -7,7 +7,7 @@ export type {
   ManualContext,
   InsightSignal,
   JdValidationResult,
-} from '@/types/outreach'
+} from '@advance-academy/contracts/outreach'
 
 export type ManualContextStatus = 'idle' | 'loading' | 'success' | 'error'
 
@@ -28,15 +28,15 @@ export interface OutreachFormData {
   targetCountry: string
   targetPersonName: string
   targetRole: string
-  experienceLevel: import('@/types/outreach').ExperienceLevel
-  intent: import('@/types/outreach').OutreachIntent
+  experienceLevel: import('@advance-academy/contracts/outreach').ExperienceLevel
+  intent: import('@advance-academy/contracts/outreach').OutreachIntent
   userLocation: string
   jdText: string
   jdUrl: string
   jdValidating: boolean
   jdValidationError: string
   manualContexts: ManualContextLink[]
-  selectedInsightCards: import('@/types/outreach').EnrichmentCard[]
-  outputs: import('@/types/outreach').OutreachOutputs
-  enrichmentResults: import('@/types/outreach').EnrichmentResponse | null
+  selectedInsightCards: import('@advance-academy/contracts/outreach').EnrichmentCard[]
+  outputs: import('@advance-academy/contracts/outreach').OutreachOutputs
+  enrichmentResults: import('@advance-academy/contracts/outreach').EnrichmentResponse | null
 }

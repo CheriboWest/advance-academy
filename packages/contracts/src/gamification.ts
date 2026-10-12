@@ -1,5 +1,5 @@
 /**
- * Gamification v2 (migration 047, docs/GAMIFICATION_V2.md): XP for verified
+ * Gamification v2 (migration 047, supabase/CLAUDE.md): XP for verified
  * actions, streaks with rest days, daily quests, a weekly challenge,
  * achievements and Career Coins. Coins are earn-only — a score, never credits.
  *

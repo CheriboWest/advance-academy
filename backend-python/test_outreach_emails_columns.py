@@ -11,7 +11,7 @@ referenced against outreach_emails — every frontend query (reads and
 writes, across every file that touches the table, not just the one the
 last reported error happened to be in) plus the backend's own send-time
 write in app/routers/email.py — is accounted for: either part of the
-documented pre-migrations baseline (apps/web/lib/types.ts's OutreachEmail
+documented pre-migrations baseline (features/career-hub/lib/types.ts's OutreachEmail
 interface says which those are) or declared by an `add column if not
 exists` in some migration. It cannot confirm a migration was actually
 applied to any particular live database — no test in this repo can — but
@@ -38,7 +38,7 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 TABLE = "outreach_emails"
 
 # Columns confirmed present before the migrations directory existed (see
-# apps/web/lib/types.ts's OutreachEmail interface and migration 0012's
+# features/career-hub/lib/types.ts's OutreachEmail interface and migration 0012's
 # header comment) — anything else must be explicitly added by a migration.
 BASELINE_COLUMNS = {
     "id", "coach_user_id", "company_id", "recruiter_id",

@@ -6,7 +6,7 @@ import type {
   JdValidationResult,
   OutreachRequest,
   OutreachResult,
-} from '@/types/outreach'
+} from '@advance-academy/contracts/outreach'
 
 export async function submitOutreachGeneration(request: OutreachRequest): Promise<OutreachResult> {
   return fetchJson<OutreachResult>('/api/outreach/generate', {

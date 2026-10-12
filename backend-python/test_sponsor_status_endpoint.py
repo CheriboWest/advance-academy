@@ -28,8 +28,6 @@ import os
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "service-role-test-key")
 
-from typing import Any, Optional  # noqa: E402
-
 from app.sponsors.service import company_sponsorship_status  # noqa: E402
 
 _failures: list[str] = []

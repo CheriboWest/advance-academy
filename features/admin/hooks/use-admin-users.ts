@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { listAdminUsers, updateAdminUser } from '../api/frontend-client'
-import type { AdminUserPatch, AdminUsersFilters } from '@/types/admin'
+import type { AdminUserPatch, AdminUsersFilters } from '@advance-academy/contracts/admin'
 
 // Filters are part of the query key so switching tier/search caches each
 // combination independently — mirrors use-leads.

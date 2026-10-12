@@ -1,15 +1,17 @@
-# CareerHub UK — API (`apps/api`)
+# backend-python — Career Hub API
 
-FastAPI backend for CareerHub UK. This milestone implements **AI outreach
-generation** using Anthropic Claude Haiku. Deploy target: **Railway**.
+FastAPI service behind Career Hub (`/search`, `/companies`, `/coach`): company
+and job search data, the coach crawler, contacts, the UK sponsor register,
+AI outreach and email. It came from career-hub's `apps/api` and stays Python.
+Deploy target: **Railway**.
 
-The Anthropic API key lives here, server-side only, and is **never** exposed to
-the frontend — the frontend calls this backend, which calls Anthropic.
+The browser never calls it directly — it goes through the Next.js rewrite
+`/api/careerhub/*` → `BACKEND_PYTHON_URL`; server code calls it directly. The
+Anthropic API key lives here, server-side only.
 
 ## Stack
 
-- **Framework:** FastAPI
-- **Server:** Uvicorn
+- **Framework:** FastAPI on Uvicorn
 - **AI:** Anthropic Claude Haiku (`claude-haiku-4-5`) via the official
   `anthropic` Python SDK
 - **Language:** Python 3.11+
@@ -17,19 +19,23 @@ the frontend — the frontend calls this backend, which calls Anthropic.
 ## Structure
 
 ```
-apps/api/
+backend-python/
 ├── app/
-│   ├── __init__.py
-│   ├── main.py            # FastAPI app + CORS + /health
+│   ├── main.py            # FastAPI app + CORS + /health, includes the routers
 │   ├── config.py          # env-based settings (dotenv)
+│   ├── auth.py            # Supabase JWT verification, is_admin gate for coach routes
 │   ├── schemas.py         # Pydantic request/response models
-│   └── routers/
-│       └── ai.py          # POST /ai/outreach
+│   ├── routers/           # ai, companies, contacts, discover (crawler), email, sponsors
+│   ├── companies/         # sector classification, AI company summaries
+│   ├── crawler/           # Adzuna + Reed sources, normalize, scoring, pipeline
+│   └── sponsors/          # GOV.UK register import, candidate search, resolver, worker
+├── scripts/               # classify_sectors, import_sponsor_register, resolve_sponsorship
+├── test_*.py              # plain-Python self-checks (see below)
+├── fake_supabase.py, crawl_test_support.py, repo_paths.py   # shared test helpers
+├── tests/fixtures/        # sample sponsor-register CSV
 ├── requirements.txt
 ├── .env.example
-├── Procfile               # Railway/Heroku-style start command
-├── railway.json           # Railway deploy config
-└── runtime.txt            # Python version hint
+├── Procfile / railway.json / runtime.txt   # Railway deploy
 ```
 
 ## Endpoint
@@ -134,7 +140,7 @@ an uninstalled function is 500 (naming the migration to apply), and any other
 database failure is 502 — in which case nothing was deleted, because the
 transaction rolled back.
 
-Requires migration `infra/supabase/migrations/0004_company_permanent_delete.sql`.
+Requires migration `supabase/migrations/027_ch0004_company_permanent_delete.sql`.
 
 ### Crawler (authenticated)
 
@@ -156,7 +162,7 @@ the counts second would leave a window where a finished crawl renders zeros.
 `GET /discover/status/{run_id}` reads those columns straight back — nothing is
 recomputed or aggregated from `jobs`/`companies`.
 
-Requires migration `infra/supabase/migrations/0005_crawl_run_stats_columns.sql`.
+Requires migration `supabase/migrations/028_ch0005_crawl_run_stats_columns.sql`.
 Without it the database has nowhere to store the counts; the pipeline falls back
 to a status-only write (so the run still finishes) and logs a message naming the
 migration.
@@ -241,7 +247,7 @@ is recorded as `error` so the next run picks it up again.
 #### Resolving manually
 
 ```bash
-cd apps/api
+cd backend-python
 python scripts/resolve_sponsorship.py --company <uuid>           # one company
 python scripts/resolve_sponsorship.py --company <uuid> --force   # force a recheck
 python scripts/resolve_sponsorship.py --all --limit 200          # backfill
@@ -285,7 +291,7 @@ existed.
 #### Running the importer manually
 
 ```bash
-cd apps/api
+cd backend-python
 
 # 1. Validate a manually downloaded edition. Writes nothing.
 python scripts/import_sponsor_register.py --file register.csv --validate
@@ -363,7 +369,7 @@ Progress is logged per batch:
 [sponsor-import] edition batch 27/568 retry=1 reason=ReadTimeout backoff=1.4s
 ```
 
-Verification queries for after an import: `infra/supabase/verify_sponsor_import.sql`.
+Verification queries for after an import: `supabase/careerhub/verify_sponsor_import.sql`.
 
 `GET /health` returns `{"status": "ok"}`.
 
@@ -395,7 +401,7 @@ Copy `.env.example` to `.env` and fill in:
 ## Run locally
 
 ```bash
-cd apps/api
+cd backend-python
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -420,7 +426,8 @@ uvicorn app.main:app --reload --port 8000
 
 ## Self-checks
 
-The API ships plain-Python self-checks (no pytest). Run them from `apps/api`:
+The API ships plain-Python self-checks (no pytest). Run them all from
+`backend-python/` with `for f in test_*.py; do .venv/bin/python $f; done`, or one at a time:
 
 ```bash
 python test_auth.py        # JWKS token verification

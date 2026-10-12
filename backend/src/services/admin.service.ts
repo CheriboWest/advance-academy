@@ -21,26 +21,8 @@ import {
  * caller is already proven to be an admin.
  */
 
-export interface AdminUserRow {
-  id: string;
-  email: string | null;
-  full_name: string | null;
-  status: UserStatus;
-  tier: Tier;
-  is_admin: boolean;
-  credit_balance: number;
-  /** Coaching sessions left — a separate quota from the wallet (migration 019). */
-  coaching_credits: number;
-  referral_count: number;
-  first_tool_used_at: string | null;
-  reviewed_at: string | null;
-  created_at: string;
-  /** Newest tool run / interview / coaching booking. Null = has done nothing. */
-  last_active_at: string | null;
-  /** Events in the last 30 days. Zero is a real answer, not "unknown". */
-  events_30d: number;
-  total_events: number;
-}
+import type { AdminUserRow } from '@advance-academy/contracts/admin';
+export type { AdminUserRow };
 
 export interface ListUsersFilters {
   /** Case-insensitive substring match on email. */

@@ -9,7 +9,7 @@ Root cause: FastAPI's error body isn't one shape. A route that raises
 ContactWrite's email-format and "needs a contact method" checks in
 schemas.py, both raised as `ValueError` from a validator) sends
 `{"detail": [{"msg": "...", "loc": [...], ...}, ...]}` — an ARRAY of error
-objects. apps/web/lib/contacts-api.ts's authFetch did `String(data.detail)`
+objects. features/career-hub/lib/contacts-api.ts's authFetch did `String(data.detail)`
 unconditionally; `String(anArrayOfPlainObjects)` is exactly where
 "[object Object]" came from.
 

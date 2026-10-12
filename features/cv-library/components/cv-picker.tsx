@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { authedFetch } from '@/shared/auth/authed-fetch'
+import { listCvVersions } from '@/features/cv-library/api/frontend-client'
 
 interface CvOption {
   id: string
@@ -29,7 +29,7 @@ export function CvPicker({ id, value, onChange, optional = false }: CvPickerProp
 
   useEffect(() => {
     let cancelled = false
-    authedFetch('/api/cv-library/versions')
+    listCvVersions()
       .then(async (res) => {
         if (!res.ok) throw new Error('load failed')
         return (await res.json()) as CvOption[]

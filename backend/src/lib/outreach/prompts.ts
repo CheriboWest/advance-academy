@@ -1,4 +1,4 @@
-import type { OutreachRequest } from '../../types/outreach.js';
+import type { OutreachRequest } from '@advance-academy/contracts/outreach';
 
 export const OUTREACH_SYSTEM_PROMPT = `You are an expert career strategist and executive copywriter.
 Your goal is to generate personalized, highly effective outreach messages for a job seeker.
@@ -124,13 +124,4 @@ Before you finalize your response, count the characters of linkedInMessage. If i
   sections.push(formatBlock);
 
   return { stable: stableSections.join('\n\n'), variable: sections.join('\n\n') };
-}
-
-export function buildOutreachUserPrompt(
-  request: OutreachRequest,
-  jdContext: string,
-  insightContext: string,
-): string {
-  const { stable, variable } = buildOutreachUserMessageParts(request, jdContext, insightContext);
-  return `${stable}\n\n${variable}`;
 }

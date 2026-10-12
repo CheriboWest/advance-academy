@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { getSupabaseBrowser } from '@/shared/auth/supabase-browser'
-import type { UserStatus } from '@/types/admin'
+import type { UserStatus } from '@advance-academy/contracts/admin'
 
 interface AuthContextValue {
   session: Session | null

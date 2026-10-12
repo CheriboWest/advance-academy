@@ -2,7 +2,7 @@
 
 import { AlertTriangle, Lightbulb, Loader, Search } from 'lucide-react'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import type { EnrichmentCard, EnrichmentResponse, ExperienceLevel } from '@/types/outreach'
+import type { EnrichmentCard, EnrichmentResponse, ExperienceLevel } from '@advance-academy/contracts/outreach'
 import { SignalCard, SignalCardSkeleton } from './signal-card'
 
 const EXPERIENCE_LEVELS: { value: ExperienceLevel; label: string }[] = [

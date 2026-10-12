@@ -3,7 +3,7 @@ import { cn } from "@/shared/utils/cn";
 interface CompanySummaryProps {
   /** From `public_company_summary.ai_summary` — generated at write time
    *  (company creation / crawl enrichment / manual refresh), never on
-   *  render. See apps/api/app/companies/summarizer.py. `null` until first
+   *  render. See backend-python/app/companies/summarizer.py. `null` until first
    *  generated. */
   summary: string | null;
   className?: string;

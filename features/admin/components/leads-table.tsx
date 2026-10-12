@@ -10,7 +10,7 @@ import { HttpClientError } from '@/shared/api/http-client'
 // root are erased before the bundler sees them and so get away with it — these
 // two are values, and would not.
 import { houseLabel, leadsToCsv } from '@advance-academy/contracts/leads'
-import type { Contactability, LeadRow } from '@/types/leads'
+import type { Contactability, LeadRow } from '@advance-academy/contracts/leads'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'

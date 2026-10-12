@@ -14,7 +14,7 @@ import {
 } from '../services/gamification.service.js';
 
 /**
- * Gamification v2 (migration 047, docs/GAMIFICATION_V2.md). No LLM, no credits.
+ * Gamification v2 (migration 047, supabase/CLAUDE.md). No LLM, no credits.
  *
  * Behind GAMIFICATION_V2_ENABLED: while it is off, GET /api/gamification answers
  * `{ enabled: false }` (the frontend keeps the weekly-tasks panel) and every

@@ -3,9 +3,8 @@
 Several self-checks here assert *agreement* between the FastAPI layer and the
 web and migration layers — that a route the API exposes has a client calling it,
 that a column the code reads exists in a migration. That makes them the tests
-most sensitive to the tree moving, and during the career-hub merge the tree
-moves twice: `apps/api` -> `backend-python` (done), and `careerhub/apps/web` ->
-the merged Next app (Stage 4, still to come).
+most sensitive to the tree moving, and the career-hub merge moved it twice:
+`apps/api` -> `backend-python`, and `careerhub/apps/web` -> the merged Next app.
 
 Each test used to derive its own root with `Path(__file__).resolve().parents[2]`,
 which silently became wrong the moment this directory changed depth — six tests

@@ -131,14 +131,3 @@ export interface SavedJobDetailResponse {
   job: SavedJob
   events: JobEvent[]
 }
-
-/**
- * 409 body when the same link is saved twice (AC7). Extends the shared
- * `{ code, message }` error shape with the id of the card that already exists so
- * the UI can link straight to it.
- */
-export interface JobAlreadySavedError {
-  code: 'JOB_ALREADY_SAVED'
-  message: string
-  jobId: string
-}

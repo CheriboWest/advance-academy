@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { generateOutreach } from '../services/outreach.service.js';
 import { runEnrichment } from '../services/outreach-enrichment.service.js';
 import { validateJdUrl } from '../services/outreach-jd-validator.service.js';
-import type { EnrichmentRequest, OutreachRequest } from '../types/outreach.js';
+import type { EnrichmentRequest, OutreachRequest } from '@advance-academy/contracts/outreach';
 import { perUserDaily } from '../lib/rate-limit.js';
 import { publicErrorMessage } from '../lib/public-error.js';
 

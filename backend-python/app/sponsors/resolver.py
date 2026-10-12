@@ -27,7 +27,7 @@ logger = logging.getLogger("careerhub.sponsors.resolver")
 
 # The version `output_config` (structured output) has been stable at since it
 # replaced the earlier `output_format` parameter. Referenced only in the error
-# message below — apps/api/requirements.txt is what actually enforces it.
+# message below — backend-python/requirements.txt is what actually enforces it.
 _MIN_ANTHROPIC_VERSION = "0.77.0"
 
 # Below this, a claimed match is recorded for review instead of being trusted.
@@ -263,7 +263,7 @@ def _check_structured_output_supported(client: Any) -> None:
         f"The installed anthropic SDK (version {installed}) does not support "
         "the `output_config` parameter this resolver requires for structured "
         f"output, added in anthropic {_MIN_ANTHROPIC_VERSION}. Install the "
-        "version pinned in apps/api/requirements.txt and redeploy."
+        "version pinned in backend-python/requirements.txt and redeploy."
     )
 
 

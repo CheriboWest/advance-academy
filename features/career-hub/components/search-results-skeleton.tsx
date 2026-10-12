@@ -1,5 +1,3 @@
-import * as React from "react";
-
 /** Placeholder grid shown while search results are loading on the server. */
 export function SearchResultsSkeleton() {
   return (

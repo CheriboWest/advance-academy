@@ -1,4 +1,3 @@
-import * as React from "react";
 import Link from "next/link";
 import { Briefcase, ChevronRight, MapPin } from "lucide-react";
 

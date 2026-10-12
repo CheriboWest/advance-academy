@@ -24,7 +24,7 @@ here first.
 from __future__ import annotations
 
 import re
-from repo_paths import APP_DIR, CAREERHUB_DIR
+from repo_paths import APP_DIR
 
 _failures: list[str] = []
 

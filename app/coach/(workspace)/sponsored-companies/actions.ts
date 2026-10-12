@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
  * Revalidate the pages whose rendered output depends on a company's
  * contacts, after a contact is added, edited, or deleted.
  *
- * Contact mutations (apps/web/lib/contacts-api.ts) go straight from the
+ * Contact mutations (features/career-hub/lib/contacts-api.ts) go straight from the
  * browser to the FastAPI backend — there is no Server Action or Supabase
  * write on this path for Next.js to key a cache invalidation off of, unlike
  * every other coach mutation in this app (see companies/actions.ts,
