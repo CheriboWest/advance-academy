@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchJson } from '@/shared/api/http-client'
 import { getAuthHeaders } from '@/shared/auth/get-auth-headers'
 import { useAuth } from '@/features/auth/context/AuthContext'
-import type { Tier, UserStatus } from '@/types/admin'
+import type { Tier, UserStatus } from '@advance-academy/contracts/admin'
 
 export interface AccountSummary {
   /** Approval gate. Anything other than 'approved' means every tool route 403s. */

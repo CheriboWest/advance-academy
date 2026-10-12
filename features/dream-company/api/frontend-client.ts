@@ -1,6 +1,6 @@
 'use client'
 
-import type { DreamCompanyInput, ProfileAnalysis, TargetRole, RoadmapResponse } from '@/types/dream-company'
+import type { DreamCompanyInput, ProfileAnalysis, TargetRole, RoadmapResponse } from '@advance-academy/contracts/dream-company'
 import { fetchFormDataJson, fetchJson, HttpClientError } from '@/shared/api/http-client'
 import { getAuthHeaders } from '@/shared/auth/get-auth-headers'
 

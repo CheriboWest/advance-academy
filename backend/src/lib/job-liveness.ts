@@ -17,7 +17,7 @@
  *   - FAIL-OPEN on timeout / network error / any other status (keep the job + it counts
  *     as unchecked): a false drop hides a real vacancy.
  */
-import type { ExaJobListing } from '../types/dream-company.js';
+import type { ExaJobListing } from '@advance-academy/contracts/dream-company';
 
 export interface LivenessOptions {
   timeoutMs: number;

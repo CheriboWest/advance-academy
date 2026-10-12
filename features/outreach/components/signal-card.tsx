@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Check, ChevronDown, ExternalLink, Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import type { EnrichmentCard } from '@/types/outreach'
+import type { EnrichmentCard } from '@advance-academy/contracts/outreach'
 import { cn } from '@/shared/utils/cn'
 
 function getHostname(url: string): string {

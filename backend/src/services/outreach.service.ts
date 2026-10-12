@@ -3,7 +3,7 @@ import { OUTREACH_SYSTEM_PROMPT, buildOutreachUserMessageParts } from '../lib/ou
 import { truncateLinkedInMessage } from '../lib/outreach/truncate.js';
 import { newCostBucket } from '../lib/cost-tracker.js';
 import { extractContent } from './outreach-extractor.service.js';
-import type { OutreachRequest, OutreachResult } from '../types/outreach.js';
+import type { OutreachRequest, OutreachResult } from '@advance-academy/contracts/outreach';
 
 // Anthropic prompt caching breakpoint (5-minute ephemeral). Applied to the static
 // system prompt and the sender's CV so repeat requests re-read them instead of

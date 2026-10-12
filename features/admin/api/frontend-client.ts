@@ -3,13 +3,13 @@
 import { fetchJson } from '@/shared/api/http-client'
 import { getAuthHeaders } from '@/shared/auth/get-auth-headers'
 import type { AdminPersonProfile } from '@advance-academy/contracts/admin-person'
-import type { LeadsFilters, LeadsListResponse } from '@/types/leads'
+import type { LeadsFilters, LeadsListResponse } from '@advance-academy/contracts/leads'
 import type {
   AdminUserPatch,
   AdminUserPatchResponse,
   AdminUsersFilters,
   AdminUsersListResponse,
-} from '@/types/admin'
+} from '@advance-academy/contracts/admin'
 
 // Admin lead list (CA-001, Bước 6). Calls the Next.js proxy, which forwards the
 // Supabase bearer token to the backend. Backend enforces the ADMIN_USER_IDS gate.

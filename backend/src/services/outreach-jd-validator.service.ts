@@ -1,6 +1,6 @@
 import { assertLlmConfigured, createAnthropicClient, getFeatureModel } from '../lib/llm-anthropic.js';
 import { extractTextFromUrl } from './outreach-extractor.service.js';
-import type { JdValidationResult } from '../types/outreach.js';
+import type { JdValidationResult } from '@advance-academy/contracts/outreach';
 
 function firstTextContent(response: { content: Array<{ type: string; text?: string }> }): string {
   const block = response.content[0];

@@ -21,7 +21,8 @@ import { creditReferralOnActivation } from '../services/referral.service.js';
  */
 
 export type CreditTool = 'cv' | 'dream' | 'interview' | 'coverLetter';
-export type Tier = 'trial' | 'membership';
+import type { Tier } from '@advance-academy/contracts/admin';
+export type { Tier };
 
 /** Credit price per run. Env overrides let the host retune without a redeploy. */
 const COSTS: Record<CreditTool, { env: string; fallback: number; label: string }> = {

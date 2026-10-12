@@ -1,5 +1,5 @@
 // Tool run history (sprint F5).
-// Mirrors the backend shapes returned by GET /api/tool-results.
+// The shapes GET /api/tool-results sends; the backend imports these too.
 
 export type ToolName = 'cv' | 'dream' | 'interview' | 'coaching' | 'cover_letter'
 

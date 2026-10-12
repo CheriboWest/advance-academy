@@ -1,4 +1,4 @@
-import type { OutreachRequest } from '../../types/outreach.js';
+import type { OutreachRequest } from '@advance-academy/contracts/outreach';
 
 export const OUTREACH_SYSTEM_PROMPT = `You are an expert career strategist and executive copywriter.
 Your goal is to generate personalized, highly effective outreach messages for a job seeker.

@@ -1,5 +1,5 @@
 // Admin user management (sprint F4).
-// Mirrors the backend `AdminUserRow` returned by GET /api/admin/users.
+// The shapes GET/PATCH /api/admin/users send; the backend imports these too.
 
 export type Tier = 'trial' | 'membership'
 

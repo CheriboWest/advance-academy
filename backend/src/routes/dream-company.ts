@@ -11,7 +11,7 @@ import {
   streamTargetRoles,
   streamRoadmapWithJobs,
 } from '../services/dream-company.service.js';
-import type { DreamCompanyInput, ProfileAnalysis, TargetRole } from '../types/dream-company.js';
+import type { DreamCompanyInput, ProfileAnalysis, TargetRole } from '@advance-academy/contracts/dream-company';
 import { getJobMaxRoleQueries } from '../config/job-source.js';
 import { perUserDaily } from '../lib/rate-limit.js';
 import { assertCredits, spendCredits } from '../lib/credits.js';

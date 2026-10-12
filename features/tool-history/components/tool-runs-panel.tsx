@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useToolResult, useToolResults } from '../hooks/use-tool-results'
-import { TOOL_LABELS, type ToolName } from '@/types/tool-results'
+import { TOOL_LABELS, type ToolName } from '@advance-academy/contracts/tool-results'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'

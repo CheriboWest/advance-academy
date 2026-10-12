@@ -94,7 +94,7 @@ import type {
   TargetRole,
   ExaJobListing,
   CareerRoadmap,
-} from '@/types/dream-company'
+} from '@advance-academy/contracts/dream-company'
 
 // ─── Constants ───────────────────────────────────────────────
 

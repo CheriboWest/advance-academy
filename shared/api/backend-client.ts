@@ -7,20 +7,21 @@ import type {
   RewriteBulletResponse,
 } from '@advance-academy/contracts'
 import type { AdminPersonProfile } from '@advance-academy/contracts/admin-person'
-import type { LeadsFilters, LeadsListResponse } from '@/types/leads'
+import type { ExtractedJob } from '@advance-academy/contracts/interview-prep'
+import type { LeadsFilters, LeadsListResponse } from '@advance-academy/contracts/leads'
 import type {
   AdminUserPatch,
   AdminUserPatchResponse,
   AdminUsersFilters,
   AdminUsersListResponse,
-} from '@/types/admin'
+} from '@advance-academy/contracts/admin'
 import type {
   EnrichmentRequest,
   EnrichmentResponse,
   JdValidationResult,
   OutreachRequest,
   OutreachResult,
-} from '@/types/outreach'
+} from '@advance-academy/contracts/outreach'
 import { fetchFormDataJson, fetchJson } from '@/shared/api/http-client'
 import { getServerEnv } from '@/shared/env/server'
 
@@ -112,14 +113,6 @@ export function extractOutreachTextWithBackend(payload: { url: string }, authTok
     headers: authHeaders(authToken),
     timeoutMs: 60000,
   })
-}
-
-export interface ExtractedJob {
-  jobTitle: string
-  jobDescription: string
-  companyName: string
-  companyUrl: string
-  extraLinks: string[]
 }
 
 export function extractJobFromUrlWithBackend(payload: { url: string }, authToken?: string) {
