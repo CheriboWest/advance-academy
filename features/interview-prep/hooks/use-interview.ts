@@ -1,7 +1,14 @@
 'use client'
 
 import { useState, useCallback, useRef } from 'react'
-import { authedFetch } from '@/shared/auth/authed-fetch'
+import {
+  evaluateInterview,
+  postInterview,
+  requestCoachAnswerGenerate,
+  requestCoachAnswerPreview,
+  transcribeInterviewAudio,
+} from '@/features/interview-prep/api/frontend-client'
+import { postJitClarification } from '@/features/cv-library/api/frontend-client'
 import type {
   InterviewStep,
   InterviewContext,
@@ -54,14 +61,10 @@ export function useInterview() {
     setError(null)
 
     try {
-      const res = await authedFetch('/api/interview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'start',
-          personaId: selectedPersona,
-          context,
-        }),
+      const res = await postInterview({
+        action: 'start',
+        personaId: selectedPersona,
+        context,
       })
 
       if (!res.ok) {
@@ -128,19 +131,15 @@ export function useInterview() {
         content: m.content,
       }))
 
-      const res = await authedFetch('/api/interview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'message',
-          sessionId: session.id,
-          content: candidateMessage.content,
-          messageHistory,
-          personaId: session.personaId,
-          context: session.context,
-          dbSessionId: dbSessionIdRef.current,
-          questionId: questionIdRef.current,
-        }),
+      const res = await postInterview({
+        action: 'message',
+        sessionId: session.id,
+        content: candidateMessage.content,
+        messageHistory,
+        personaId: session.personaId,
+        context: session.context,
+        dbSessionId: dbSessionIdRef.current,
+        questionId: questionIdRef.current,
       })
 
       if (!res.ok) throw new Error('Failed to send message')
@@ -193,11 +192,7 @@ export function useInterview() {
       const msg = session.messages.find((m) => m.id === messageId)
       if (!msg || msg.role !== 'candidate' || !msg.questionAsked) return
       try {
-        const res = await authedFetch('/api/interview/coach-answer/preview', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: msg.questionAsked }),
-        })
+        const res = await requestCoachAnswerPreview({ question: msg.questionAsked })
         if (!res.ok) {
           throw new Error(await readErrorMessage(res, 'Failed to load preview'))
         }
@@ -250,27 +245,23 @@ export function useInterview() {
         content: m.content,
       }))
       try {
-        const res = await authedFetch('/api/interview/coach-answer/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: msg.questionAsked,
-            answer: msg.content,
-            context: {
-              jobTitle: session.context.jobTitle,
-              jobDescription: session.context.jobDescription,
-              companyName: session.context.companyName,
-            },
-            selectedBulletIds,
-            conversationHistory: priorTurns,
-            irsScore: msg.irsScore && {
-              integrity: msg.irsScore.integrity.score,
-              relevance: msg.irsScore.relevance.score,
-              substance: msg.irsScore.substance.score,
-              overall: msg.irsScore.overall,
-            },
-            assessmentId: msg.assessmentId,
-          }),
+        const res = await requestCoachAnswerGenerate({
+          question: msg.questionAsked,
+          answer: msg.content,
+          context: {
+            jobTitle: session.context.jobTitle,
+            jobDescription: session.context.jobDescription,
+            companyName: session.context.companyName,
+          },
+          selectedBulletIds,
+          conversationHistory: priorTurns,
+          irsScore: msg.irsScore && {
+            integrity: msg.irsScore.integrity.score,
+            relevance: msg.irsScore.relevance.score,
+            substance: msg.irsScore.substance.score,
+            overall: msg.irsScore.overall,
+          },
+          assessmentId: msg.assessmentId,
         })
         if (!res.ok) {
           throw new Error(await readErrorMessage(res, 'Failed to coach'))
@@ -299,14 +290,10 @@ export function useInterview() {
       const prompt = msg.coach.missingEvidencePrompts[promptIndex]
       if (!prompt) return
       try {
-        await authedFetch('/api/cv-library/jit-clarification', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            bulletId: prompt.bulletId,
-            question: prompt.question,
-            answer,
-          }),
+        await postJitClarification({
+          bulletId: prompt.bulletId,
+          question: prompt.question,
+          answer,
         })
         // After saving, re-run the coach so the placeholder disappears.
         // Reuse the user's already-curated selection — don't re-run preview.
@@ -328,13 +315,9 @@ export function useInterview() {
     setSession(evaluatingSession)
 
     try {
-      const res = await authedFetch('/api/evaluate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session: evaluatingSession,
-          dbSessionId: dbSessionIdRef.current,
-        }),
+      const res = await evaluateInterview({
+        session: evaluatingSession,
+        dbSessionId: dbSessionIdRef.current,
       })
 
       if (!res.ok) throw new Error('Failed to evaluate session')
@@ -376,10 +359,7 @@ export function useInterview() {
             : 'webm'
       formData.append('file', blob, `answer.${extension}`)
 
-      const res = await authedFetch('/api/interview/transcribe', {
-        method: 'POST',
-        body: formData,
-      })
+      const res = await transcribeInterviewAudio(formData)
 
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as

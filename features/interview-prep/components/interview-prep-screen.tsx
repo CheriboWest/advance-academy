@@ -2,9 +2,17 @@
 
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { authedFetch } from '@/shared/auth/authed-fetch'
+import { extractJobFromUrl, getCoachingMockContext } from '@/features/interview-prep/api/frontend-client'
+import {
+  activateCvVersion,
+  addGapArtifact,
+  getBulletDetails,
+  getCvVersion,
+  listCvVersions,
+  updateArtifact,
+} from '@/features/cv-library/api/frontend-client'
 import { useFakeProgress } from '@/shared/hooks/use-fake-progress'
-import { ProgressBar } from '@/shared/hooks/progress-bar'
+import { ProgressBar } from '@/shared/components/progress-bar'
 import Link from 'next/link'
 import {
   ArrowRight,
@@ -116,9 +124,7 @@ export function InterviewPrepScreen({ onNavigate }: InterviewPrepScreenProps) {
     setCoachingLoad({ state: 'loading' })
     ;(async () => {
       try {
-        const res = await authedFetch(
-          `/api/coaching/sessions/${encodeURIComponent(coachingSessionId)}/mock`,
-        )
+        const res = await getCoachingMockContext(coachingSessionId)
         const body = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(body?.message ?? 'Could not load that coaching pack.')
         if (cancelled) return
@@ -345,7 +351,7 @@ function SetupStep({
       setCvLoading(true)
       setCvError(null)
       try {
-        const res = await authedFetch('/api/cv-library/versions')
+        const res = await listCvVersions()
         if (!res.ok) throw new Error('Failed to load CVs')
         const data: CvVersionOption[] = await res.json()
         if (cancelled) return
@@ -375,7 +381,7 @@ function SetupStep({
     ;(async () => {
       setLoadingRawText(true)
       try {
-        const res = await authedFetch(`/api/cv-library/versions/${selectedCvId}`)
+        const res = await getCvVersion(selectedCvId)
         if (!res.ok) throw new Error('Failed to load CV')
         const data: { rawText: string } = await res.json()
         if (cancelled) return
@@ -396,7 +402,7 @@ function SetupStep({
   const handleSelectCv = async (id: string) => {
     setSelectedCvId(id)
     try {
-      await authedFetch(`/api/cv-library/versions/${id}/activate`, { method: 'POST' })
+      await activateCvVersion(id)
       setCvVersions((prev) => prev.map((c) => ({ ...c, isActive: c.id === id })))
     } catch {
       // non-fatal
@@ -432,11 +438,7 @@ function SetupStep({
     setExtractInfo(null)
     startExtractProgress()
     try {
-      const res = await authedFetch('/api/interview-prep/extract-job-from-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      })
+      const res = await extractJobFromUrl({ url })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data?.error || data?.message || 'Failed to extract job details')
@@ -1218,7 +1220,7 @@ function CoachPanel({
   const handleRefreshBullet = async (bulletId: string) => {
     if (!preview) return
     try {
-      const res = await authedFetch(`/api/cv-library/bullets/${bulletId}/details`)
+      const res = await getBulletDetails(bulletId)
       if (!res.ok) return
       const detail = (await res.json()) as BulletWithGapsDto
       const updatedBullet: CoachPreviewBullet = adaptBulletDetail(detail, currentSimilarity(preview, bulletId))
@@ -1257,7 +1259,7 @@ function CoachPanel({
     }
     // Otherwise lazy-load the bullet's gaps + raw artifacts.
     try {
-      const res = await authedFetch(`/api/cv-library/bullets/${bulletId}/details`)
+      const res = await getBulletDetails(bulletId)
       if (!res.ok) return
       const detail = (await res.json()) as BulletWithGapsDto
       const newBullet = adaptBulletDetail(detail, 0)
@@ -1645,11 +1647,7 @@ function CoachArtifactView({
     setBusy(true)
     setErr(null)
     try {
-      const res = await authedFetch(`/api/cv-library/artifacts/${artifact.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.trim() }),
-      })
+      const res = await updateArtifact(artifact.id, { text: text.trim() })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data?.error || data?.message || 'Failed to update')
@@ -1739,11 +1737,7 @@ function CoachArtifactComposer({
     setBusy(true)
     setErr(null)
     try {
-      const res = await authedFetch(`/api/cv-library/gaps/${gapId}/artifacts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.trim() }),
-      })
+      const res = await addGapArtifact(gapId, { text: text.trim() })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data?.error || data?.message || 'Failed')

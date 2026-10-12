@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { BackLink } from '@/components/back-link'
-import { authedFetch } from '@/shared/auth/authed-fetch'
+import { getInterviewSession, listInterviewSessions } from '@/features/interview-prep/api/frontend-client'
 import {
   Loader2,
   AlertCircle,
@@ -46,7 +46,7 @@ export function InterviewHistoryScreen() {
     setError(null)
     try {
       const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
-      const res = await authedFetch(`/api/interview/sessions${query}`)
+      const res = await listInterviewSessions(query)
       if (!res.ok) throw new Error('Failed to load sessions')
       const data = await res.json()
       setSessions((previous) =>
@@ -65,7 +65,7 @@ export function InterviewHistoryScreen() {
     setLoadingDetail(true)
     setError(null)
     try {
-      const res = await authedFetch(`/api/interview/sessions/${id}`)
+      const res = await getInterviewSession(id)
       if (!res.ok) throw new Error('Failed to load session')
       const data = await res.json()
       setSelected(data.session)

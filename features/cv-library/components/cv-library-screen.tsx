@@ -3,9 +3,24 @@
 // React 19 dropped the global JSX namespace; it's imported from 'react' now.
 import { useCallback, useEffect, useState, type JSX } from 'react'
 import { BackLink } from '@/components/back-link'
-import { authedFetch } from '@/shared/auth/authed-fetch'
+import {
+  activateCvVersion,
+  addGapArtifact,
+  deleteCvVersion,
+  finalizeCvVersion,
+  findSimilarBullets,
+  generateCoachReport,
+  getCoachReport,
+  getCvVersionBullets,
+  listCoachReports,
+  listCvVersions,
+  mergeBullets,
+  skipGap,
+  updateArtifact,
+  uploadCvVersion,
+} from '@/features/cv-library/api/frontend-client'
 import { useFakeProgress } from '@/shared/hooks/use-fake-progress'
-import { ProgressBar } from '@/shared/hooks/progress-bar'
+import { ProgressBar } from '@/shared/components/progress-bar'
 import {
   Loader2,
   Upload,
@@ -89,7 +104,7 @@ export function CvLibraryScreen() {
     setLoading(true)
     setError(null)
     try {
-      const res = await authedFetch('/api/cv-library/versions')
+      const res = await listCvVersions()
       if (!res.ok) throw new Error('Failed to load CVs')
       setVersions(await res.json())
     } catch (e) {
@@ -202,7 +217,7 @@ export function CvLibraryScreen() {
                 {!v.isActive && (
                   <button
                     onClick={async () => {
-                      await authedFetch(`/api/cv-library/versions/${v.id}/activate`, { method: 'POST' })
+                      await activateCvVersion(v.id)
                       refresh()
                     }}
                     className="px-3 py-1.5 text-sm border rounded-lg hover:bg-card"
@@ -214,7 +229,7 @@ export function CvLibraryScreen() {
                   onClick={async () => {
                     if (!confirm(`Delete "${v.name}"? Shared bullets will survive if linked to other versions.`))
                       return
-                    await authedFetch(`/api/cv-library/versions/${v.id}`, { method: 'DELETE' })
+                    await deleteCvVersion(v.id)
                     refresh()
                   }}
                   className="p-2 text-subtle-foreground hover:text-red-600"
@@ -257,7 +272,7 @@ function UploadCard({ onParsed }: { onParsed: (data: Phase1Response) => void }) 
       const fd = new FormData()
       fd.append('name', name.trim())
       fd.append('file', file)
-      const res = await authedFetch('/api/cv-library/versions', { method: 'POST', body: fd })
+      const res = await uploadCvVersion(fd)
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data?.error || data?.message || 'Upload failed')
@@ -395,11 +410,7 @@ function BulletResolutionStep({
           existingBulletId: d.existingBulletId,
         }
       })
-      const res = await authedFetch(`/api/cv-library/versions/${phase1.cvVersionId}/finalize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parsedBullets: phase1.parsedBullets, resolutions }),
-      })
+      const res = await finalizeCvVersion(phase1.cvVersionId, { parsedBullets: phase1.parsedBullets, resolutions })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data?.error || 'Finalize failed')
@@ -569,7 +580,7 @@ function CvDetail({
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await authedFetch(`/api/cv-library/versions/${versionId}/bullets`)
+      const res = await getCvVersionBullets(versionId)
       if (res.ok) setBullets(await res.json())
     } finally {
       setLoading(false)
@@ -650,7 +661,7 @@ function BulletCard({
   const loadSimilar = async () => {
     setMergeLoading(true)
     try {
-      const res = await authedFetch(`/api/cv-library/bullets/${bullet.id}/similar`, { method: 'POST' })
+      const res = await findSimilarBullets(bullet.id)
       if (res.ok) setCandidates(await res.json())
       setMergeMode(true)
     } finally {
@@ -662,11 +673,7 @@ function BulletCard({
     if (!confirm('Merge this bullet into the selected one? Its gaps will be combined.')) return
     setMergeLoading(true)
     try {
-      await authedFetch('/api/cv-library/bullets/merge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceBulletId: bullet.id, targetBulletId: targetId }),
-      })
+      await mergeBullets({ sourceBulletId: bullet.id, targetBulletId: targetId })
       setMergeMode(false)
       onChanged()
     } finally {
@@ -768,11 +775,7 @@ function ArtifactRow({
     setBusy(true)
     setErr(null)
     try {
-      const res = await authedFetch(`/api/cv-library/artifacts/${artifact.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.trim() }),
-      })
+      const res = await updateArtifact(artifact.id, { text: text.trim() })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data?.error || 'Failed to update')
@@ -860,11 +863,7 @@ function GapForm({
     setBusy(true)
     setErr(null)
     try {
-      const res = await authedFetch(`/api/cv-library/gaps/${gap.id}/artifacts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.trim() }),
-      })
+      const res = await addGapArtifact(gap.id, { text: text.trim() })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data?.error || 'Failed')
@@ -881,7 +880,7 @@ function GapForm({
   const skip = async () => {
     setBusy(true)
     try {
-      await authedFetch(`/api/cv-library/gaps/${gap.id}/skip`, { method: 'POST' })
+      await skipGap(gap.id)
       onChanged()
     } finally {
       setBusy(false)
@@ -1003,7 +1002,7 @@ function CoachUnderstandingSection({
 
   const loadReports = async () => {
     try {
-      const res = await authedFetch('/api/coach-understanding/reports')
+      const res = await listCoachReports()
       if (res.ok) setReports(await res.json())
     } catch {
       // non-fatal
@@ -1019,11 +1018,7 @@ function CoachUnderstandingSection({
     setErr(null)
     start()
     try {
-      const res = await authedFetch('/api/coach-understanding/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(selectedVersionId ? { cvVersionId: selectedVersionId } : {}),
-      })
+      const res = await generateCoachReport(selectedVersionId ? { cvVersionId: selectedVersionId } : {})
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data?.message || data?.error || 'Failed to generate report')
@@ -1148,7 +1143,7 @@ function ReportViewer({ reportId, onBack }: { reportId: string; onBack: () => vo
     ;(async () => {
       setLoading(true)
       try {
-        const res = await authedFetch(`/api/coach-understanding/reports/${reportId}`)
+        const res = await getCoachReport(reportId)
         if (res.ok) setReport(await res.json())
       } finally {
         setLoading(false)

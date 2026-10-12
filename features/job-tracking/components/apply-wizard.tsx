@@ -7,7 +7,7 @@ import type { SavedJob } from '@advance-academy/contracts/job-tracking'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
-import { authedFetch } from '@/shared/auth/authed-fetch'
+import { extractJobFromUrl } from '@/features/interview-prep/api/frontend-client'
 import { CvPicker } from '@/features/cv-library/components/cv-picker'
 import {
   todayLocalDay,
@@ -71,11 +71,7 @@ function JobCheck({ job }: { job: SavedJob }) {
     setFetching(true)
     setError(null)
     try {
-      const res = await authedFetch('/api/interview-prep/extract-job-from-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: job.jobUrl }),
-      })
+      const res = await extractJobFromUrl({ url: job.jobUrl })
       const data = (await res.json().catch(() => ({}))) as { jobDescription?: string; message?: string }
       if (!res.ok) throw new Error(data.message ?? 'Could not read that link.')
       const jd = data.jobDescription?.trim() ?? ''
