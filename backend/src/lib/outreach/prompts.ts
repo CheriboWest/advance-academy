@@ -125,12 +125,3 @@ Before you finalize your response, count the characters of linkedInMessage. If i
 
   return { stable: stableSections.join('\n\n'), variable: sections.join('\n\n') };
 }
-
-export function buildOutreachUserPrompt(
-  request: OutreachRequest,
-  jdContext: string,
-  insightContext: string,
-): string {
-  const { stable, variable } = buildOutreachUserMessageParts(request, jdContext, insightContext);
-  return `${stable}\n\n${variable}`;
-}

@@ -51,7 +51,6 @@ backend/src/
 │   └── cv-library.ts                    /api/cv-library/* (versions — two-phase upload, finalize, bullets/similar, bullets/merge, gaps, artifacts, jit-clarification, backfill-embeddings)
 ├── services/                            Business logic
 │   ├── system.service.ts
-│   ├── llm.service.ts                   HTTP JSON mode, generateJson()
 │   ├── cv-optimizer.service.ts          Async job queue + heuristic fallback
 │   ├── dream-company.service.ts         4-step Anthropic SDK pipeline
 │   ├── outreach.service.ts              Single-call message generation
@@ -117,21 +116,11 @@ Canonical example: `backend/src/routes/dream-company.ts:18-66`.
 
 ## LLM integration
 
-Two entry points, use the right one for the job:
+### `lib/llm-anthropic.ts` + Anthropic SDK
 
-### `services/llm.service.ts` — HTTP JSON mode
-
-- Raw `fetch` to the LLM provider. Supports Anthropic Messages and OpenAI-compatible chat endpoints.
-- `generateJson<T>(feature, userPrompt, { systemPrompt, ... })` — returns typed, JSON-parsed output.
-- Feature-aware model selection — looks up `LLM_MODEL_{FEATURE}` from `config/llm.ts`.
-- Has `extractJsonBlock()` for tolerating models that wrap JSON in prose or code fences.
-- **Use for:** fast one-shot JSON calls. Currently used by CV Optimizer.
-
-### `lib/llm-anthropic.ts` + Anthropic SDK — multi-step pipelines
-
-- Uses the official `@anthropic-ai/sdk` client.
-- Better for complex workflows where you need multiple sequential calls with different prompts.
-- **Use for:** multi-step features. Currently used by Dream Company (4 calls: profile analysis → company matrix → target roles → career roadmap) and Outreach.
+- The one place the official `@anthropic-ai/sdk` client is built; every LLM feature goes through it.
+- Resolves the per-feature model and API key from `config/llm.ts`; `assertLlmConfigured` and `withRetry` live here too.
+- `lib/run-json-task.ts` is a narrow one-call → JSON helper on top of it, used only by the CV Optimizer V2 agents.
 
 ### Model configuration
 
@@ -212,7 +201,7 @@ Assume you're adding a "Job Tracker" feature. (The frontend side is in [ADD_A_FE
 
 1. **Types** — `backend/src/types/job-tracker.ts` with `JobTrackerInput` and `JobTrackerResult`.
 2. **Prompts** — `backend/src/lib/job-tracker/prompts.ts` with `JOB_TRACKER_SYSTEM_PROMPT`.
-3. **Service** — `backend/src/services/job-tracker.service.ts` with `analyzeJob(input): Promise<JobTrackerResult>`. Throw `Error` with `statusCode: 503` if `LLM_API_KEY` is missing. Use `generateJson` from `llm.service.ts` with feature key `jobTracker`.
+3. **Service** — `backend/src/services/job-tracker.service.ts` with `analyzeJob(input): Promise<JobTrackerResult>`. Throw `Error` with `statusCode: 503` if `LLM_API_KEY` is missing. Call the model through `lib/llm-anthropic.ts` (`createAnthropicClient('jobTracker')` + `getFeatureModel`).
 4. **Config** — `backend/src/config/llm.ts`: add `jobTracker` to the feature map, reading `LLM_MODEL_JOB_TRACKER`.
 5. **Route** — `backend/src/routes/job-tracker.ts` with `registerJobTrackerRoutes(app)`. Copy the catch block from `routes/dream-company.ts`.
 6. **Register** — in `backend/src/main.ts`, import and call `registerJobTrackerRoutes(app)` after the existing routes.

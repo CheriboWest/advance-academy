@@ -1,11 +1,10 @@
 /**
  * Alignment agent — owns `jdAlignment`.
  *
- * Part of the dormant CV Optimizer agent architecture (step 3). Wraps the
+ * One branch of the CV Optimizer V2 pipeline (buildLlmAnalysisV2). Wraps the
  * CV_ALIGNMENT_PROMPT module and runJsonTask(), returning only its owned slice.
  * The JD is REQUIRED — JD alignment is meaningless without it. No
- * todayInstruction(): requirement matching does not judge date realism. Not
- * wired into buildLlmAnalysis(); nothing calls this yet.
+ * todayInstruction(): requirement matching does not judge date realism.
  */
 import { assertLlmConfigured, createAnthropicClient } from '../../lib/llm-anthropic.js';
 import { cvAgentModel, CV_LLM_CLIENT_OPTIONS } from './models.js';

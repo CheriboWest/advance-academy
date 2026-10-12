@@ -60,7 +60,7 @@ Return ONLY the JSON object, no prose, no markdown, no code fences.`
 **Create `backend/src/services/job-tracker.service.ts`:**
 
 ```ts
-import { generateJson } from './llm.service.js'
+import { assertLlmConfigured, createAnthropicClient, getFeatureModel } from '../lib/llm-anthropic.js'
 import { JOB_TRACKER_SYSTEM_PROMPT } from '../lib/job-tracker/prompts.js'
 import type { JobTrackerInput, JobTrackerResult } from '../types/job-tracker.js'
 
@@ -71,17 +71,19 @@ export async function analyzeJob(input: JobTrackerInput): Promise<JobTrackerResu
     throw error
   }
 
-  if (!process.env.LLM_API_KEY) {
-    const error = new Error(
-      'LLM is not configured (set LLM_API_KEY in backend/.env).',
-    ) as Error & { statusCode: number }
-    error.statusCode = 503
-    throw error
-  }
-
-  return generateJson<JobTrackerResult>('jobTracker', input.jobDescription, {
-    systemPrompt: JOB_TRACKER_SYSTEM_PROMPT,
+  assertLlmConfigured('jobTracker') // 503 when LLM_API_KEY is missing
+  const response = await createAnthropicClient('jobTracker').messages.create({
+    model: getFeatureModel('jobTracker'),
+    max_tokens: 2048,
+    system: JOB_TRACKER_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: input.jobDescription }],
   })
+
+  const block = response.content[0]
+  if (block?.type !== 'text') {
+    throw Object.assign(new Error('LLM returned no text'), { statusCode: 502 })
+  }
+  return JSON.parse(block.text) as JobTrackerResult
 }
 ```
 

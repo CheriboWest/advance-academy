@@ -16,12 +16,9 @@
 ## Layering (template)
 
 1. **Route** imports **only** the matching **service**.
-2. **Service** validates input, runs the workflow, imports from **`lib/`**, **`config/`**, **`types/`**, or **`llm.service.ts`** as needed.
-3. **`lib/<feature>/prompts.ts`** — all copy/prompt construction for that feature. The matching **`services/<feature>.service.ts`** owns validation, `anthropic.messages.create` (or `llm.service`), parsing, and retries.
+2. **Service** validates input, runs the workflow, imports from **`lib/`**, **`config/`**, or **`types/`** as needed.
+3. **`lib/<feature>/prompts.ts`** — all copy/prompt construction for that feature. The matching **`services/<feature>.service.ts`** owns validation, the LLM call, parsing, and retries.
 
-## LLM stacks (current)
+## LLM client
 
-- **`services/llm.service.ts`** — HTTP client (OpenAI-compatible chat + Anthropic Messages) with JSON extraction. Used by **CV optimizer** (and suitable for new features if token limits fit).
-- **`lib/llm-anthropic.ts`** — Anthropic SDK + `assertLlmConfigured`. Used by **dream-company** and **outreach** where calls use higher `max_tokens` or the SDK API shape.
-
-Unifying on a single client is possible later (e.g. extend `llm.service` with per-call `max_tokens`); until then, pick the stack that matches token needs.
+- **`lib/llm-anthropic.ts`** — Anthropic SDK + `assertLlmConfigured`, per-feature model/key from `config/llm.ts`. Every LLM feature goes through it.

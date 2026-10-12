@@ -1,10 +1,9 @@
 /**
  * Keywords agent — owns `keywordHighlights`.
  *
- * Part of the dormant CV Optimizer agent architecture (step 3). Wraps the
+ * One branch of the CV Optimizer V2 pipeline (buildLlmAnalysisV2). Wraps the
  * CV_KEYWORDS_PROMPT module and runJsonTask(), returning only its owned slice.
- * No todayInstruction(): keyword extraction does not judge date realism. Not
- * wired into buildLlmAnalysis(); nothing calls this yet.
+ * No todayInstruction(): keyword extraction does not judge date realism.
  *
  * NOTE: this JD keyword extraction intentionally overlaps the ATS pipeline's
  * extractAtsKeywords() — deduplication is out of scope for this refactor.

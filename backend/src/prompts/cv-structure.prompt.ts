@@ -4,8 +4,7 @@
  * Extracted from the monolithic SYSTEM_PROMPT in cv-optimizer.service.ts as
  * part of step 1 (prompt decomposition only). Instructions are preserved
  * word-for-word from the source; only the JSON schema is narrowed to this
- * module's owned fields. Not yet wired into buildLlmAnalysis() — this is a
- * dormant export, no runtime behaviour changes in this step.
+ * module's owned fields. Used by the V2 agent pipeline (buildLlmAnalysisV2).
  *
  * Source lines (cv-optimizer.service.ts): 669–670 (header), 674–676 (sections
  * schema), 680–683 (formatCheck schema), 706 (sections rule), 708 (formatCheck

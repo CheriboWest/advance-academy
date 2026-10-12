@@ -1,5 +1,5 @@
 /**
- * Normalizers for the dormant CV Optimizer agents.
+ * Normalizers for the CV Optimizer V2 agents.
  *
  * Relocates the still-useful per-item invariants from cv-optimizer.service.ts's
  * normalizeResult() into the agent that produces each slice, so each agent's Out

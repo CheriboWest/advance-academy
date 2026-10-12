@@ -1,11 +1,9 @@
 /**
  * Structure agent — owns `sections` and `formatCheck`.
  *
- * Part of the dormant CV Optimizer agent architecture (step 3). Wraps the
+ * One branch of the CV Optimizer V2 pipeline (buildLlmAnalysisV2). Wraps the
  * CV_STRUCTURE_PROMPT module and runJsonTask(), returning only its owned slice.
- * It is unaware of AnalyzeCvResult as a whole and does no business validation —
- * the caller's normalizeResult handles that. Not wired into buildLlmAnalysis();
- * nothing calls this yet.
+ * It is unaware of AnalyzeCvResult as a whole and does no business validation.
  */
 import { assertLlmConfigured, createAnthropicClient } from '../../lib/llm-anthropic.js';
 import { cvAgentModel, CV_LLM_CLIENT_OPTIONS } from './models.js';

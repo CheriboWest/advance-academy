@@ -250,37 +250,6 @@ export async function finalizeCvBullets(userId: string,
   };
 }
 
-// ── Legacy one-shot upload (for backward compat — auto-creates all as new) ──
-
-export async function createCvVersionFromText(args: {
-  name: string;
-  rawText: string;
-  userId: string;
-  sourceFilePath?: string | null;
-}): Promise<{ cvVersionId: string; bulletCount: number; gapCount: number }> {
-  const phase1 = await parseCvVersion(args);
-  const resolutions: BulletResolution[] = phase1.parsedBullets.map((b) => ({
-    tempId: b.tempId,
-    action: 'new',
-  }));
-  const result = await finalizeCvBullets(args.userId, phase1.cvVersionId, phase1.parsedBullets, resolutions);
-  return {
-    cvVersionId: phase1.cvVersionId,
-    bulletCount: result.bulletCount,
-    gapCount: result.gapCount,
-  };
-}
-
-export async function createCvVersionFromFile(
-  name: string,
-  fileBuffer: Buffer,
-  fileName: string,
-  userId: string,
-): Promise<{ cvVersionId: string; bulletCount: number; gapCount: number }> {
-  const rawText = await extractTextFromFile(fileBuffer, fileName.toLowerCase());
-  return createCvVersionFromText({ name, rawText, userId });
-}
-
 // ── Similarity search ───────────────────────────────────────────────────────
 
 // Bullet-merge similarity threshold. 0.40 drops bullets that aren't plausibly
@@ -605,17 +574,6 @@ export async function getCvVersion(id: string, userId: string): Promise<CvVersio
     .select('*')
     .eq('id', id)
     .eq('user_id', userId)
-    .maybeSingle();
-  return (data as CvVersionRow | null) ?? null;
-}
-
-export async function getActiveCvVersion(userId: string): Promise<CvVersionRow | null> {
-  const supabase = getSupabase();
-  const { data } = await supabase
-    .from('cv_versions')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_active', true)
     .maybeSingle();
   return (data as CvVersionRow | null) ?? null;
 }

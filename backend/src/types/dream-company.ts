@@ -82,13 +82,3 @@ export interface CareerRoadmap {
   futureYou: FutureYou;
   phases: RoadmapPhase[];
 }
-
-export interface DreamCompanyResult {
-  profile: DreamCompanyInput;
-  analysis: ProfileAnalysis;
-  roles: TargetRole[];
-  selectedRoles?: TargetRole[];
-  jobs?: ExaJobListing[];
-  roadmap?: CareerRoadmap;
-  generatedAt: string;
-}

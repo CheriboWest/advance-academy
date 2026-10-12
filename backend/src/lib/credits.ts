@@ -46,11 +46,6 @@ export function membershipGrant(): number {
   return envInt('CREDIT_GRANT_MEMBERSHIP', 20);
 }
 
-/** Starting balance for a fresh trial account (mirrors the DB column default). */
-export function trialGrant(): number {
-  return envInt('CREDIT_GRANT_TRIAL', 2);
-}
-
 /**
  * Coaching sessions granted once on upgrade to membership (migration 019).
  *
@@ -166,22 +161,6 @@ export async function spendCredits(userId: string | undefined, tool: CreditTool)
   }
 }
 
-/** Add credits to a wallet (referral rewards, admin top-ups). Returns the new balance. */
-export async function addCredits(userId: string, amount: number): Promise<number> {
-  const supabase = getSupabase();
-  const { data: current } = await supabase
-    .from('users')
-    .select('credit_balance')
-    .eq('id', userId)
-    .maybeSingle();
-  const next = Math.max(0, ((current?.credit_balance as number) ?? 0) + amount);
-  const { error } = await supabase.from('users').update({ credit_balance: next }).eq('id', userId);
-  if (error) {
-    throw Object.assign(new Error('Credit update failed'), { statusCode: 500, cause: error });
-  }
-  return next;
-}
-
 /**
  * Throw 403 unless the user is on membership (or an admin). Gates the features
  * that mentorship pays for: the Interview Lab mock session and coach booking.
@@ -285,20 +264,4 @@ export async function spendCoachingCredit(userId: string | undefined): Promise<v
   if (!charged) {
     console.warn(`[credits] coaching deduction skipped for ${userId}: quota already spent`);
   }
-}
-
-/** Add coaching sessions to an account (admin top-up). Returns the new balance. */
-export async function addCoachingCredits(userId: string, amount: number): Promise<number> {
-  const supabase = getSupabase();
-  const { data: current } = await supabase
-    .from('users')
-    .select('coaching_credits')
-    .eq('id', userId)
-    .maybeSingle();
-  const next = Math.max(0, ((current?.coaching_credits as number) ?? 0) + amount);
-  const { error } = await supabase.from('users').update({ coaching_credits: next }).eq('id', userId);
-  if (error) {
-    throw Object.assign(new Error('Coaching quota update failed'), { statusCode: 500, cause: error });
-  }
-  return next;
 }

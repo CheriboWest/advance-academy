@@ -23,26 +23,6 @@ export interface CvVersionSummary {
   sourceFilePath: string | null;
 }
 
-export interface CvBulletRow {
-  id: string;
-  cv_version_id: string;
-  section_path: string | null;
-  bullet_text: string;
-  ordinal: number;
-  created_at: string;
-}
-
-export interface BulletGapRow {
-  id: string;
-  bullet_id: string;
-  question: string;
-  rationale: string | null;
-  ordinal: number;
-  status: 'open' | 'answered' | 'skipped';
-  created_at: string;
-  updated_at: string;
-}
-
 export interface BulletArtifactRow {
   id: string;
   gap_id: string;
@@ -111,10 +91,6 @@ export interface BulletResolution {
   tempId: string;
   action: 'merge' | 'new';
   existingBulletId?: string;
-}
-
-export interface CvFinalizeRequest {
-  resolutions: BulletResolution[];
 }
 
 export interface CvFinalizeResponse {

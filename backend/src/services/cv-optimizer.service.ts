@@ -738,7 +738,7 @@ const REFERENCE_USAGE_INSTRUCTIONS = [
   '- Keep the output ATS-friendly and concise.',
 ].join('\n');
 
-export async function buildLlmAnalysis(body: AnalyzeCvRequest): Promise<AnalyzeCvResult | null> {
+async function buildLlmAnalysis(body: AnalyzeCvRequest): Promise<AnalyzeCvResult | null> {
   console.log('🐘 Using Monolith');
   assertLlmConfigured('cvOptimizer');
 
@@ -992,7 +992,7 @@ export async function createCvAnalysisJob(body: AnalyzeCvRequest, userId: string
   // Migrations here are applied by hand, so code can reach production before its
   // schema does. Losing `input_json` for a while is a shame; failing every CV
   // analysis until someone opens the SQL editor is an outage. Fall back once,
-  // loudly, and let `npm run check:migration-018` be how this gets noticed.
+  // loudly, so the error log is how this gets noticed.
   if (error && isMissingColumnError(error)) {
     console.error('[cv-optimizer] cv_analysis_jobs.input_json is missing — run migration 018.');
     ({ data, error } = await insertJob(false));

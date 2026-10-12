@@ -11,7 +11,7 @@ import { getSupabase } from './supabase.js';
  * cheap fix: store the text once, hand back an id, reuse the row next time the
  * same text shows up.
  *
- * Deliberately NOT `createCvVersionFromText` (cv-knowledge.service): that one
+ * Deliberately NOT the CV Library upload (`parseCvVersion` + `finalizeCvBullets`): that
  * runs an LLM bullet extraction plus embeddings per bullet. Paying for that on
  * every CV Optimizer run would be absurd. Rows minted here carry raw text only —
  * bullets get extracted later, on demand, by whoever actually needs them.

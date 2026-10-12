@@ -138,8 +138,6 @@ New dependency: `@supabase/supabase-js` (already hoisted in the workspace root).
 | `parseCvVersion({ name, rawText })` ⭐ | **Phase 1.** Inserts `cv_versions` row → extracts bullets via LLM → for each parsed bullet, embeds via Voyage and calls `findSimilarBullets` to get top-5 pool candidates. Returns `CvUploadPhase1Response = { cvVersionId, detectedField, parsedBullets[] }`. **Does NOT write any bullets or gaps yet** — the user must resolve each bullet first. |
 | `parseCvVersionFromFile(name, buffer, fileName)` ⭐ | Same as `parseCvVersion` but extracts text from a PDF/DOCX first via the existing outreach-extractor helpers. |
 | `finalizeCvBullets(cvVersionId, parsedBullets, resolutions)` ⭐ | **Phase 2.** Takes the user's merge/new decision for each bullet. For `merge`, inserts a `cv_version_bullets` junction row linking the existing bullet. For `new`, inserts a new pooled `cv_bullets` row (with `user_id` + batch Voyage embedding) + junction row + generates 5 gaps. Returns `{ bulletCount, newBulletCount, mergedBulletCount, gapCount }`. |
-| `createCvVersionFromText({ name, rawText })` | **Legacy** one-shot path that wraps the two phases for backward compat (auto-creates every bullet as new, no merge prompt). |
-| `createCvVersionFromFile(name, buffer, fileName)` | Same, file variant. |
 
 **Similarity + merge** ⭐ (new in 003):
 
@@ -156,7 +154,6 @@ New dependency: `@supabase/supabase-js` (already hoisted in the workspace root).
 | `listCvVersions()` | Returns `CvVersionSummary[]` with bullet count and open-gap count. ⚠️ Now counts via the `cv_version_bullets` junction. |
 | `activateCvVersion(id)` | Clears any existing active CV, then sets this one active. |
 | `deleteCvVersion(id)` | Deletes the `cv_versions` row. ⚠️ Cascades only to `cv_version_bullets` junction rows now — the pooled bullets + gaps + artifacts survive if linked to other versions. |
-| `getActiveCvVersion()` | Returns the user's current active CV. |
 | `getCvVersion(id)` | Returns one `cv_versions` row (raw text + metadata) for the interview-prep CV picker. |
 | `listBulletsWithGaps(cvVersionId)` | Returns bullets nested with gaps and artifacts for a given version. ⚠️ Now joins through `cv_version_bullets` to find the bullet ids, then reads from the shared pool. |
 | `addArtifactToGap(gapId, payload)` | Accepts `text`, `file`, `url`, or `jit_clarification`. Runs the **summarize-with-quotes** LLM pass biased toward the gap question, producing `summary_json: { overview, my_contribution, concrete_facts[], metrics[] }`. Marks the gap `answered`. Short text (≤80 chars) skips the LLM and stores a single literal fact. |
