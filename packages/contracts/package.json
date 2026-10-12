@@ -13,6 +13,7 @@
     "./cv-optimizer": "./src/cv-optimizer.ts",
     "./dream-company": "./src/dream-company.ts",
     "./engagement": "./src/engagement.ts",
+    "./gamification": "./src/gamification.ts",
     "./interview-prep": "./src/interview-prep.ts",
     "./job-tracking": "./src/job-tracking.ts",
     "./jobs": "./src/jobs.ts",

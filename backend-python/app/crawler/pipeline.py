@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Iterable, Optional
 
@@ -54,6 +55,8 @@ SPONSORSHIP_TIMEOUT_SECONDS = 240.0
 SUMMARY_TIMEOUT_SECONDS = 240.0
 # Same again for sector classification (one Claude call per 50 companies).
 SECTOR_TIMEOUT_SECONDS = 120.0
+# close_expired_jobs() after a crawl: one indexed UPDATE, so this is generous.
+EXPIRY_SWEEP_TIMEOUT_SECONDS = 30.0
 
 
 def _now_iso() -> str:
@@ -130,15 +133,23 @@ async def _fetch_source(
     coro: Awaitable[list[NormalizedJob]],
     stats: CrawlStats,
 ) -> list[NormalizedJob]:
-    """Await a single source, timing it and isolating its failure."""
+    """Await a single source, timing it and isolating its failure.
+
+    Also notes the outcome for this pair (`stats.pair_fetches`): how many
+    results the source returned, or None if it failed — `source_errors` is keyed
+    by source name across the whole run, so it can't say which pair failed.
+    """
     start = time.perf_counter()
     try:
-        return await coro
+        result = await coro
     except Exception as exc:  # noqa: BLE001 - partial failure is expected
         stats.source_errors[name] = _safe_error(exc)
+        stats.pair_fetches[name] = None
         return []
     finally:
         log_stage(f"fetch:{name}", time.perf_counter() - start)
+    stats.pair_fetches[name] = len(result)
+    return result
 
 
 async def _fetch_all(
@@ -170,6 +181,7 @@ async def _fetch_all(
             )
         else:
             stats.source_errors["adzuna"] = "Adzuna credentials not configured."
+            stats.pair_fetches["adzuna"] = None
 
     if "reed" in sources:
         if settings.reed_api_key:
@@ -188,6 +200,7 @@ async def _fetch_all(
             )
         else:
             stats.source_errors["reed"] = "Reed credentials not configured."
+            stats.pair_fetches["reed"] = None
 
     # Run all sources concurrently — total time is the slowest source, not the sum.
     results = await asyncio.gather(*tasks) if tasks else []
@@ -206,13 +219,21 @@ async def _ingest(
     rest: SupabaseRest,
     jobs: list[NormalizedJob],
     stats: CrawlStats,
+    scope: Optional[tuple[str, str]] = None,
+    seen_at: Optional[str] = None,
 ) -> None:
     """Ingest one pair's jobs, accumulating into `stats`.
 
     Every counter here accumulates rather than assigns: a run walks a list of
     (query, city) pairs sharing one CrawlStats, so assigning would report only
     whichever pair happened to finish last.
+
+    `scope` is the pair's normalised (query, location) and `seen_at` the one
+    timestamp stamped on every job sighted in it (and, by `_record_fetches`, on
+    the pair's fetch rows — the same instant, so a fetch is never evidence
+    against a job it returned). Without a scope no sightings are written.
     """
+    seen_at = seen_at or _now_iso()
     if not jobs:
         return
 
@@ -343,48 +364,87 @@ async def _ingest(
         # the new-vs-updated split below can still be attributed per source
         # even though existing_hashes is looked up for all rows at once.
         unique_row_sources: list[str] = []
-        seen_hashes: set[str] = set()
+        row_by_hash: dict[str, dict[str, Any]] = {}
+        # Every (job, source) this pair returned — in-crawl duplicates
+        # included, so a job both sources list is sighted by both.
+        sightings: set[tuple[str, str]] = set()
         for slug in slugs:
             company_id = company_id_by_slug.get(slug)
             if not company_id:
+                # These jobs are not stored, so this pair can't vouch for
+                # having seen everything it returned.
+                stats.pair_complete = False
                 continue
             for job in groups[slug]["jobs"]:
                 digest = content_hash(slug, job.title, job.city)
-                if digest in seen_hashes:
+                sightings.add((digest, job.source))
+                kept = row_by_hash.get(digest)
+                if kept is not None:
                     stats.duplicate_jobs += 1
                     stats.record_source_outcome(job.source, duplicate=1, verified=1)
+                    # Keep the latest stated closing date either copy carries.
+                    if job.expires_at and (
+                        not kept.get("expires_at") or job.expires_at > kept["expires_at"]
+                    ):
+                        kept["expires_at"] = job.expires_at
                     continue
-                seen_hashes.add(digest)
-                unique_rows.append(
-                    {
-                        "company_id": company_id,
-                        "title": normalize_title(job.title),
-                        "location_raw": job.location_raw or job.city,
-                        "city": normalize_city(job.city),
-                        "salary_min": job.salary_min,
-                        "salary_max": job.salary_max,
-                        "posted_at": job.posted_at,
-                        "is_active": True,
-                        "source": job.source,
-                        "source_job_id": job.source_job_id,
-                        "source_url": job.source_url,
-                        "content_hash": digest,
-                    }
-                )
+                row: dict[str, Any] = {
+                    "company_id": company_id,
+                    "title": normalize_title(job.title),
+                    "location_raw": job.location_raw or job.city,
+                    "city": normalize_city(job.city),
+                    "salary_min": job.salary_min,
+                    "salary_max": job.salary_max,
+                    "posted_at": job.posted_at,
+                    "is_active": True,
+                    "source": job.source,
+                    "source_job_id": job.source_job_id,
+                    "source_url": job.source_url,
+                    "content_hash": digest,
+                }
+                # Only a source that states a closing date sends the key: the
+                # upsert updates exactly the columns it is sent, so leaving it
+                # out is what keeps a date another source stored earlier.
+                if job.expires_at:
+                    row["expires_at"] = job.expires_at
+                row_by_hash[digest] = row
+                unique_rows.append(row)
                 unique_row_sources.append(job.source)
         stats.normalized_jobs += len(unique_rows)
 
-    # Which of the unique rows already exist (updated vs inserted)?
+    # Which of the unique rows already exist (updated vs inserted)? Their
+    # stored closing state comes back too (migration 046); without it the crawl
+    # carries on exactly as before 046 and simply records no expiry evidence.
     with stage("select_existing_jobs", f"({len(unique_rows)} hashes)"):
         all_hashes = [row["content_hash"] for row in unique_rows]
-        existing_hashes: set[str] = set()
+        existing: dict[str, dict[str, Any]] = {}
+        tracking = True
         for chunk in _chunks(all_hashes, 100):
-            rows = await rest.select(
-                client,
-                "jobs",
-                {"content_hash": f"in.({_csv(chunk)})", "select": "content_hash"},
-            )
-            existing_hashes.update(row["content_hash"] for row in rows)
+            params = {"content_hash": f"in.({_csv(chunk)})"}
+            rows = None
+            if tracking:
+                try:
+                    rows = await rest.select(
+                        client,
+                        "jobs",
+                        {**params, "select": "content_hash,expires_at,closed_at,closed_reason"},
+                    )
+                except httpx.HTTPStatusError as exc:
+                    if not _is_missing_column_error(exc):
+                        raise
+                    tracking = False
+                    print(
+                        "[ingest] jobs.expires_at is missing — apply "
+                        "supabase/migrations/046_job_expiry.sql. Ingesting "
+                        "without expiry tracking for this crawl.",
+                        flush=True,
+                    )
+            if rows is None:
+                rows = await rest.select(
+                    client, "jobs", {**params, "select": "content_hash"}
+                )
+            existing.update((row["content_hash"], row) for row in rows)
+        existing_hashes = set(existing)
         updated = sum(
             1 for row in unique_rows if row["content_hash"] in existing_hashes
         )
@@ -396,16 +456,175 @@ async def _ingest(
             else:
                 stats.record_source_outcome(row_source, new=1, verified=1)
 
-    # Batch upsert (insert new + refresh existing) by content_hash.
+    if tracking:
+        _apply_expiry(unique_rows, existing, seen_at)
+    else:
+        stats.pair_complete = False
+        for row in unique_rows:
+            row.pop("expires_at", None)
+
+    # Batch upsert (insert new + refresh existing) by content_hash. One request
+    # per column set: PostgREST rejects a request whose rows name different
+    # columns (PGRST102 "All object keys must match"), and given an explicit
+    # column list it writes a missing key as null — which would wipe a stored
+    # `expires_at`. Grouping keeps Reed rows (with a date) and Adzuna rows
+    # (without) apart, so each request only updates what its rows carry.
     with stage("upsert_jobs", f"({len(unique_rows)} rows)"):
-        for chunk in _chunks(unique_rows, 100):
-            await rest.upsert(
-                client,
-                "jobs",
-                chunk,
-                on_conflict="content_hash",
-                prefer="resolution=merge-duplicates,return=minimal",
+        for group in _group_by_columns(unique_rows):
+            for chunk in _chunks(group, 100):
+                await rest.upsert(
+                    client,
+                    "jobs",
+                    chunk,
+                    on_conflict="content_hash",
+                    prefer="resolution=merge-duplicates,return=minimal",
+                )
+
+    if tracking and scope is not None:
+        await _write_sightings(client, rest, sightings, scope, seen_at, stats)
+
+
+def _parse_ts(value: Any) -> Optional[datetime]:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _apply_expiry(
+    rows: list[dict[str, Any]],
+    existing: dict[str, dict[str, Any]],
+    seen_at: str,
+) -> None:
+    """Set each row's open/closed state from its stated closing date.
+
+    The date is the row's own if its source sent one, else the one already
+    stored — so a source that states no date (Adzuna) can neither erase a
+    Reed date nor reopen a job Reed said has closed. Anything without a past
+    date is open: seeing it again reopens a job the stale sweep closed.
+    """
+    now = datetime.now(timezone.utc)
+    for row in rows:
+        prior = existing.get(row["content_hash"]) or {}
+        expiry = _parse_ts(row.get("expires_at") or prior.get("expires_at"))
+        row["last_seen_at"] = seen_at
+        if expiry is not None and expiry <= now:
+            row["is_active"] = False
+            row["closed_reason"] = "expired"
+            # Keep the original closing time on later sightings.
+            row["closed_at"] = (
+                prior.get("closed_at")
+                if prior.get("closed_reason") == "expired" and prior.get("closed_at")
+                else seen_at
             )
+        else:
+            row["is_active"] = True
+            row["closed_reason"] = None
+            row["closed_at"] = None
+
+
+def _group_by_columns(rows: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    for row in rows:
+        groups.setdefault(tuple(sorted(row)), []).append(row)
+    return list(groups.values())
+
+
+async def _write_sightings(
+    client: httpx.AsyncClient,
+    rest: SupabaseRest,
+    sightings: set[tuple[str, str]],
+    scope: tuple[str, str],
+    seen_at: str,
+    stats: CrawlStats,
+) -> None:
+    """Record where each job was seen. A failure here is logged, not raised —
+    the jobs are already stored — but it marks the pair incomplete, so its
+    fetches are not recorded either: a fetch with no matching sighting would
+    look like evidence that the job had disappeared."""
+    query, location = scope
+    rows = [
+        {
+            "content_hash": digest,
+            "source": source,
+            "query": query,
+            "location": location,
+            "last_seen_at": seen_at,
+        }
+        for digest, source in sorted(sightings)
+    ]
+    try:
+        with stage("upsert_job_sightings", f"({len(rows)} rows)"):
+            for chunk in _chunks(rows, 100):
+                await rest.upsert(
+                    client,
+                    "job_sightings",
+                    chunk,
+                    on_conflict="content_hash,source,query,location",
+                    prefer="resolution=merge-duplicates,return=minimal",
+                )
+    except Exception as exc:  # noqa: BLE001 - evidence is best-effort
+        stats.pair_complete = False
+        print(f"[ingest] job sightings not recorded: {_safe_error(exc)}", flush=True)
+
+
+async def _record_fetches(
+    client: httpx.AsyncClient,
+    rest: SupabaseRest,
+    stats: CrawlStats,
+    jobs: list[NormalizedJob],
+    run_id: Optional[str],
+    scope: tuple[str, str],
+    seen_at: str,
+) -> None:
+    """Record this pair's source fetches as evidence for the stale-job sweep —
+    only when the pair is beyond doubt complete:
+
+      * every source asked for ran and succeeded (none failed, none missing
+        credentials), so a partial crawl records nothing at all;
+      * no source's results were truncated before ingest;
+      * every returned job was stored and sighted (`stats.pair_complete`).
+
+    Empty fetches ARE recorded (result_count = 0) so coverage gaps show up, but
+    the SQL never counts them as evidence. Called last in `_execute`, after
+    everything else for the pair has succeeded. Best-effort: a failure only
+    means less evidence, which can only delay a closure, never cause one.
+    """
+    fetches = stats.pair_fetches
+    if not fetches:
+        return
+    query, location = scope
+    label = f"{query} / {location}"
+    if not stats.pair_complete:
+        print(f"[evidence] {label}: not every job was stored and sighted — fetches not recorded", flush=True)
+        return
+    failed = sorted(name for name, count in fetches.items() if count is None)
+    if failed:
+        print(f"[evidence] {label}: partial crawl ({', '.join(failed)} failed) — fetches not recorded", flush=True)
+        return
+    delivered = Counter(job.source for job in jobs)
+    truncated = sorted(name for name, count in fetches.items() if delivered[name] != count)
+    if truncated:
+        print(f"[evidence] {label}: results truncated ({', '.join(truncated)}) — fetches not recorded", flush=True)
+        return
+    rows = [
+        {
+            "run_id": run_id,
+            "source": name,
+            "query": query,
+            "location": location,
+            "result_count": count,
+            "fetched_at": seen_at,
+        }
+        for name, count in sorted(fetches.items())
+    ]
+    try:
+        await rest.insert(client, "crawl_fetches", rows, prefer="return=minimal")
+    except Exception as exc:  # noqa: BLE001 - evidence is best-effort
+        print(f"[evidence] {label}: fetches not recorded: {_safe_error(exc)}", flush=True)
 
 
 async def _execute(
@@ -417,14 +636,19 @@ async def _execute(
     stats: CrawlStats,
     normalized_query: str,
     normalized_city: str,
+    run_id: Optional[str] = None,
 ) -> None:
+    stats.begin_pair()
+    scope = (normalized_query, normalized_city)
+    # One instant for this pair's sightings and its fetch rows (see _ingest).
+    seen_at = _now_iso()
     async with httpx.AsyncClient() as client:
         with stage("fetch_total"):
             jobs = await _fetch_all(client, settings, query, city, sources, stats)
         stats.raw_jobs += len(jobs)
 
         with stage("ingest_total", f"({len(jobs)} raw jobs)"):
-            await _ingest(client, rest, jobs, stats)
+            await _ingest(client, rest, jobs, stats, scope=scope, seen_at=seen_at)
 
         # Refresh the 24h cache marker.
         with stage("upsert_discovery_query"):
@@ -441,6 +665,28 @@ async def _execute(
                 on_conflict="query,location",
                 prefer="resolution=merge-duplicates,return=minimal",
             )
+
+        # Last, so only a pair that got this far — every step above done
+        # without raising or timing out — can ever count as evidence.
+        await _record_fetches(client, rest, stats, jobs, run_id, scope, seen_at)
+
+
+async def _close_expired_jobs(rest: SupabaseRest) -> None:
+    """Close jobs whose stated closing date has passed (migration 046).
+
+    Runs after every crawl, whatever its outcome: it depends only on dates
+    already stored, never on what this crawl did or did not see. Swallowed whole
+    — a missing migration or a slow database must never fail a crawl.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            closed = await asyncio.wait_for(
+                rest.rpc(client, "close_expired_jobs"),
+                timeout=EXPIRY_SWEEP_TIMEOUT_SECONDS,
+            )
+        print(f"[expiry] closed {closed or 0} expired job(s)", flush=True)
+    except Exception as exc:  # noqa: BLE001 - never affects the crawl
+        print(f"[expiry] close_expired_jobs skipped: {_safe_error(exc)}", flush=True)
 
 
 def _is_missing_column_error(exc: httpx.HTTPStatusError) -> bool:
@@ -801,6 +1047,7 @@ async def run_crawl(
                         stats,
                         normalized_query,
                         normalized_city,
+                        run_id,
                     ),
                     timeout=OVERALL_TIMEOUT_SECONDS,
                 )
@@ -821,6 +1068,10 @@ async def run_crawl(
         status = "error"
 
     await _finalize(rest, run_id, status, stats, error_note)
+
+    # Explicitly expired jobs close on a stated date, not on crawl evidence, so
+    # this runs whether or not any pair succeeded.
+    await _close_expired_jobs(rest)
 
     # Sponsorship resolution runs AFTER the crawl reaches a terminal state, on
     # purpose. Inside `_execute` it would spend the crawl's timeout budget and a

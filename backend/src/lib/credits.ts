@@ -163,6 +163,47 @@ export async function spendCredits(userId: string | undefined, tool: CreditTool)
 }
 
 /**
+ * Gamification v2: charge for one run of `tool` INSIDE the database transaction
+ * that saves its result (migration 047's charge_credits / record_cover_letter),
+ * instead of `spendCredits` after the fact. `write` receives the price — 0 for
+ * admins, as spendCredits never charges them — and must pass it to the RPC.
+ *
+ * Unlike spendCredits a lost race is not swallowed: the RPC raises GC001, which
+ * arrives here as CREDIT_EXHAUSTED (mapGamificationDbError) and nothing is
+ * written. Call `assertCredits` first, as before, so the usual case fails fast.
+ */
+export async function spendCreditsWith<T>(
+  userId: string,
+  tool: CreditTool,
+  write: (cost: number) => Promise<T>,
+): Promise<T> {
+  const account = await getAccount(userId);
+  const cost = account.isAdmin ? 0 : costOf(tool);
+  let result: T;
+  try {
+    result = await write(cost);
+  } catch (error) {
+    if ((error as { code?: string })?.code === 'CREDIT_EXHAUSTED') {
+      throw Object.assign(error as Error, {
+        message: `You need ${cost} credit${cost === 1 ? '' : 's'} to run ${COSTS[tool].label} and have none left. Invite a friend to earn more, or upgrade to Mentorship.`,
+        scope: COSTS[tool].label,
+        cost,
+      });
+    }
+    throw error;
+  }
+  // Same activation rule as spendCredits: the first paid run pays the referrer.
+  if (cost > 0 && !account.firstToolUsedAt) {
+    try {
+      await creditReferralOnActivation(userId);
+    } catch (err) {
+      console.error(`[credits] referral payout on activation failed for ${userId}:`, err);
+    }
+  }
+  return result;
+}
+
+/**
  * Throw 403 unless the user is on membership (or an admin). Gates the features
  * that mentorship pays for: the Interview Lab mock session and coach booking.
  *

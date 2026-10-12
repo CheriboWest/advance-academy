@@ -15,6 +15,10 @@ import {
 import { getCvVersion } from './cv-knowledge.service.js';
 import { extractJobFromUrl } from './job-extraction.service.js';
 import { changeJobStatus, getSavedJob, updateSavedJob } from './job-tracking.service.js';
+import { isGamificationV2Enabled } from '../config/features.js';
+import { spendCreditsWith } from '../lib/credits.js';
+import { mapGamificationDbError } from '../lib/gamification-errors.js';
+import { getSupabase } from '../lib/supabase.js';
 
 /**
  * Cover Letter Generator: one CV from the student's CV Library + one job → one
@@ -141,7 +145,9 @@ export async function generateCoverLetter(
     .trim();
   if (!coverLetter) throw httpError(502, 'The letter came back empty. Please try again.');
 
-  if (job.savedJobId) {
+  if (isGamificationV2Enabled()) {
+    await chargeAndSaveCoverLetter(userId, job.savedJobId, coverLetter, cv.id);
+  } else if (job.savedJobId) {
     await updateSavedJob(userId, job.savedJobId, { coverLetterText: coverLetter, cvVersionId: cv.id });
     // Writing the letter is preparing the application — but never move a card backwards.
     if (job.status === 'saved') {
@@ -155,4 +161,33 @@ export async function generateCoverLetter(
     companyName: job.companyName,
     savedJobId: job.savedJobId,
   };
+}
+
+/**
+ * Gamification v2 (migration 047). The charge and the write-back are one
+ * transaction: record_cover_letter charges, writes the letter and CV onto the
+ * card, sets the cover-letter marker (the only way to — guard G2) and moves a
+ * `saved` card to `preparing`; any failure rolls all of it back. With no card
+ * there is nothing to write, so it only charges. The route then skips
+ * spendCredits.
+ */
+export async function chargeAndSaveCoverLetter(
+  userId: string,
+  savedJobId: string | null,
+  text: string,
+  cvVersionId: string | null,
+): Promise<void> {
+  await spendCreditsWith(userId, 'coverLetter', async (cost) => {
+    const sb = getSupabase();
+    const { error } = savedJobId
+      ? await sb.rpc('record_cover_letter', {
+          p_user: userId,
+          p_job: savedJobId,
+          p_text: text,
+          p_cv_version: cvVersionId,
+          p_cost: cost,
+        })
+      : await sb.rpc('charge_credits', { p_user: userId, p_cost: cost });
+    if (error) throw mapGamificationDbError(error, 'save the cover letter');
+  });
 }

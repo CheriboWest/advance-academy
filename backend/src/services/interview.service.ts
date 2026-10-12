@@ -6,6 +6,7 @@ import {
   dbStartSession,
   dbStoreQuestion,
   dbQuestionBelongsToSession,
+  dbSessionBelongsToUser,
   dbStoreAssessment,
   dbCompleteSession,
   dbUpdateSessionStatus,
@@ -169,7 +170,11 @@ export async function startInterviewSession(body: StartSessionBody, userId: stri
   return { sessionId: clientSessionId, openingQuestion, dbSessionId, questionId };
 }
 
-export async function sendInterviewMessage(body: SendMessageBody): Promise<SendMessageResponse> {
+function sessionNotFound(): Error {
+  return Object.assign(new Error('Interview session not found'), { statusCode: 404 });
+}
+
+export async function sendInterviewMessage(body: SendMessageBody, userId: string | undefined): Promise<SendMessageResponse> {
   const totalStartedAt = performance.now();
   const persona = getPersona(body.personaId);
   if (!persona) {
@@ -181,6 +186,8 @@ export async function sendInterviewMessage(body: SendMessageBody): Promise<SendM
   const questionValidationPromise = body.dbSessionId && body.questionId
     ? dbQuestionBelongsToSession(body.dbSessionId, body.questionId)
     : Promise.resolve(null);
+  // Started now, checked before anything is written (same as the question check).
+  const ownerCheckPromise = body.dbSessionId ? dbSessionBelongsToUser(body.dbSessionId, userId) : Promise.resolve(true);
 
   assertLlmConfigured('interviewPrep');
   const anthropic = createAnthropicClient('interviewPrep');
@@ -255,6 +262,7 @@ export async function sendInterviewMessage(body: SendMessageBody): Promise<SendM
     // Old clients do not send questionId. Retain their behavior during rollout,
     // while new clients reuse the already-persisted question row.
     let currentQuestionId = body.questionId;
+    if (!(await ownerCheckPromise)) throw sessionNotFound();
     const questionIsValid = await questionValidationPromise;
     if (currentQuestionId && questionIsValid === false) {
       throw Object.assign(new Error('Question does not belong to this interview session'), {
@@ -296,11 +304,15 @@ export async function sendInterviewMessage(body: SendMessageBody): Promise<SendM
   return { reply, irsScore, isComplete: isLastTurn, assessmentId, nextQuestionId };
 }
 
-export async function evaluateInterview(body: EvaluateSessionBody): Promise<{ report: FeedbackReport }> {
+export async function evaluateInterview(
+  body: EvaluateSessionBody,
+  userId: string | undefined,
+): Promise<{ report: FeedbackReport }> {
   const totalStartedAt = performance.now();
   if (!body.session || !body.session.messages || body.session.messages.length === 0) {
     throw Object.assign(new Error('Invalid session data'), { statusCode: 400 });
   }
+  if (body.dbSessionId && !(await dbSessionBelongsToUser(body.dbSessionId, userId))) throw sessionNotFound();
   let statusDbMs = 0;
   if (body.dbSessionId) {
     const statusWrite = await measured(() => dbUpdateSessionStatus(body.dbSessionId!, 'evaluating'));
