@@ -294,14 +294,10 @@ async def get_company_sponsorship_status(
     """This company's coach-facing sponsorship status.
 
     One of five normalized states — licensed | ambiguous | no_match | error |
-    not_checked — never the raw register/check rows. Coach-authenticated the
-    same way every other route on this router is: this project has no separate
-    coach/student role anywhere (no JWT claim, no profiles table), so
-    `get_current_user` — "the request carries a valid Supabase session" — IS
-    the coach gate, exactly as it already is for /sponsors/import,
-    /sponsors/resolve and every route in companies.py/ai.py/email.py. The
-    sponsorship tables stay service-role-only; nothing here is queried by the
-    browser directly.
+    not_checked — never the raw register/check rows. Coach-only like every
+    route on this router: `get_current_user` admits `users.is_admin` or
+    `ADMIN_USER_IDS` (app/auth.py). The sponsorship tables stay
+    service-role-only; nothing here is queried by the browser directly.
 
     See `CompanySponsorshipStatus` for exactly what each field means and why
     `licensed` and the other four states are trusted for freshness differently.

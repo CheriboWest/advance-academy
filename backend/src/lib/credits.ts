@@ -1,4 +1,5 @@
 import { getSupabase } from './supabase.js';
+import { isAllowlistedAdmin } from './admin.js';
 import { creditReferralOnActivation } from '../services/referral.service.js';
 
 /**
@@ -79,9 +80,11 @@ export async function getAccount(userId: string): Promise<Account> {
   }
   return {
     // Fail closed on tier (an unknown row is treated as the least-privileged
-    // tier) but never invent admin rights.
+    // tier) but never invent admin rights. The ADMIN_USER_IDS allowlist counts
+    // as in lib/admin.ts, so an allowlisted coach isn't asked for Membership
+    // on student routes (company contacts) while managing contacts in /coach.
     tier: (data?.tier as Tier) ?? 'trial',
-    isAdmin: Boolean(data?.is_admin),
+    isAdmin: Boolean(data?.is_admin) || isAllowlistedAdmin(userId),
     credits: (data?.credit_balance as number) ?? 0,
     firstToolUsedAt: (data?.first_tool_used_at as string | null) ?? null,
   };

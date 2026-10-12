@@ -253,15 +253,16 @@ export async function getCoachCompanies(
     let companiesQuery = supabase
       .from("public_company_summary")
       .select("id, slug, name, region, hq_location, open_jobs, lead_score")
-      .gt("open_jobs", 0) // companies hiring, as before migration 048
       .order("name", { ascending: true })
       .order("id")
       .range(from, to);
 
     if (hidden) {
+      // Every removed company, hiring or not, so any of them can be restored.
       companiesQuery = companiesQuery.in("id", hiddenIds);
-    } else if (hiddenIds.length) {
-      companiesQuery = companiesQuery.not("id", "in", inList(hiddenIds));
+    } else {
+      companiesQuery = companiesQuery.gt("open_jobs", 0); // hiring, as before 048
+      if (hiddenIds.length) companiesQuery = companiesQuery.not("id", "in", inList(hiddenIds));
     }
     return companiesQuery;
   });
@@ -342,15 +343,16 @@ export async function getSponsoredCompanyContext(
 ): Promise<SponsoredCompanyContext | null> {
   const supabase = await createSupabaseServerClient();
 
-  // A company the coach has removed is treated as not found in their workspace.
-  const hiddenIds = await getHiddenCompanyIds(supabase);
-  if (hiddenIds.includes(companyId)) return null;
-
-  const { data, error } = await supabase
-    .from("public_company_summary")
-    .select(SPONSORED_COMPANY_COLUMNS)
-    .eq("id", companyId)
-    .maybeSingle();
+  // A company the coach removed still opens (flagged `hidden`): the Contact
+  // Directory links to it, and its contacts are only editable here.
+  const [hiddenIds, { data, error }] = await Promise.all([
+    getHiddenCompanyIds(supabase),
+    supabase
+      .from("public_company_summary")
+      .select(SPONSORED_COMPANY_COLUMNS)
+      .eq("id", companyId)
+      .maybeSingle(),
+  ]);
 
   if (error) throw new Error(error.message);
   if (!data) return null;
@@ -369,6 +371,7 @@ export async function getSponsoredCompanyContext(
     ai_summary: (data.ai_summary as string | null) ?? null,
     ai_summary_generated_at:
       (data.ai_summary_generated_at as string | null) ?? null,
+    hidden: hiddenIds.includes(companyId),
   };
 }
 

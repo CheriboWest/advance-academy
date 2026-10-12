@@ -91,6 +91,8 @@ export interface SponsoredCompanyContext {
   lead_score: number;
   ai_summary: string | null;
   ai_summary_generated_at: string | null;
+  /** The coach removed it from their lists (it still opens). */
+  hidden?: boolean;
 }
 
 /**
