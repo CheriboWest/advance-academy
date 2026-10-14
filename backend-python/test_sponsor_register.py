@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, Optional
 
 from app.sponsors.importer import run_import
 from app.sponsors.models import ImportStats, SponsorRecord

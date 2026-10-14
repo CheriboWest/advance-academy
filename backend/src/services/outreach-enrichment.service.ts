@@ -4,7 +4,7 @@ import { withExaRetry } from '../lib/exa-client.js';
 import { newCostBucket } from '../lib/cost-tracker.js';
 import { isBlockedDomain } from './outreach-extractor.service.js';
 import { rerankCards } from './outreach-rerank.service.js';
-import type { EnrichmentCard, EnrichmentRequest, EnrichmentResponse } from '../types/outreach.js';
+import type { EnrichmentCard, EnrichmentRequest, EnrichmentResponse } from '@advance-academy/contracts/outreach';
 
 const EXA_OPTIONS = {
   useAutoprompt: true,

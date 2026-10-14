@@ -1,5 +1,5 @@
 """End to end: the import wizard's routes against a real database with
-migration 048, through PostgREST. `python test_contact_import_e2e.py`.
+migration 049, through PostgREST. `python test_contact_import_e2e.py`.
 
 LOCAL SCRATCH DATABASES ONLY. Skipped (exit 0) unless both are set:
   CONTACT_IMPORT_E2E_SUPABASE_URL   a local Supabase-style URL serving /rest/v1

@@ -1,6 +1,6 @@
 'use client'
 
-import type { DreamCompanyInput, ProfileAnalysis, TargetRole, RoadmapResponse } from '@/types/dream-company'
+import type { DreamCompanyInput, ProfileAnalysis, TargetRole, RoadmapResponse } from '@advance-academy/contracts/dream-company'
 import { fetchFormDataJson, fetchJson, HttpClientError } from '@/shared/api/http-client'
 import { getAuthHeaders } from '@/shared/auth/get-auth-headers'
 
@@ -12,42 +12,8 @@ export async function getDreamCompanyConfig(): Promise<{ maxRoles: number }> {
   })
 }
 
-export async function analyzeProfile(profile: DreamCompanyInput): Promise<ProfileAnalysis> {
-  return fetchJson<ProfileAnalysis>('/api/dream-company/analyze', {
-    method: 'POST',
-    body: JSON.stringify({ profile }),
-    headers: await getAuthHeaders(),
-    timeoutMs: 60000,
-  })
-}
-
-export async function generateRoles(
-  profile: DreamCompanyInput,
-  analysis: ProfileAnalysis,
-): Promise<TargetRole[]> {
-  return fetchJson<TargetRole[]>('/api/dream-company/roles', {
-    method: 'POST',
-    body: JSON.stringify({ profile, analysis }),
-    headers: await getAuthHeaders(),
-    timeoutMs: 60000,
-  })
-}
-
-export async function generateRoadmap(
-  profile: DreamCompanyInput,
-  analysis: ProfileAnalysis,
-  selectedRoles: TargetRole[],
-): Promise<RoadmapResponse> {
-  return fetchJson<RoadmapResponse>('/api/dream-company/roadmap', {
-    method: 'POST',
-    body: JSON.stringify({ profile, analysis, selectedRoles }),
-    headers: await getAuthHeaders(),
-    timeoutMs: 180000,
-  })
-}
-
 // ---- Streaming (SSE) variants (M2.1) --------------------------------------------------
-// Same inputs/outputs as the JSON functions above, but consume the backend's SSE stream:
+// Consume the backend's SSE stream for each step:
 // `onDelta` fires with each text chunk (drive a progress bar), and the promise resolves with
 // the final parsed result from the `done` event. See test/dream-company/M2.1-streaming-contract.md.
 

@@ -1,6 +1,6 @@
 import { forwardGamification } from './forward'
 
-// Progress summary (gamification v2), or `{ enabled: false }` while it is off.
+// Progress summary: streak, quests, XP, coins.
 export async function GET(request: Request) {
   return forwardGamification(request, '', 'GET')
 }

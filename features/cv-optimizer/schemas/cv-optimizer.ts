@@ -6,5 +6,3 @@ export const analyzeCvSchema = z.object({
   jobDescription: z.string().trim().optional().or(z.literal('')),
   savedJobId: z.string().uuid().optional(),
 })
-
-export type AnalyzeCvFormValues = z.infer<typeof analyzeCvSchema>

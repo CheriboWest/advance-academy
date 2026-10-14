@@ -17,12 +17,7 @@ import { getSupabase } from './supabase.js';
  */
 export async function isAdminUser(userId: string | undefined): Promise<boolean> {
   if (!userId) return false;
-
-  const allow = (process.env.ADMIN_USER_IDS ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (allow.includes(userId)) return true;
+  if (isAllowlistedAdmin(userId)) return true;
 
   const supabase = getSupabase();
   const { data, error } = await supabase
@@ -32,4 +27,13 @@ export async function isAdminUser(userId: string | undefined): Promise<boolean> 
     .maybeSingle();
   if (error) return false; // lookup failure must not grant access
   return Boolean(data?.is_admin);
+}
+
+/** Source 1 alone, for callers that already read `users.is_admin` themselves. */
+export function isAllowlistedAdmin(userId: string): boolean {
+  return (process.env.ADMIN_USER_IDS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .includes(userId);
 }

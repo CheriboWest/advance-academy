@@ -3,9 +3,8 @@
  *
  * Mirrors the private todayInstruction() in cv-optimizer.service.ts. It is
  * duplicated here intentionally: the original is module-private and the agent
- * architecture is kept self-contained and dormant in this step, so we do not
- * modify the existing service to export it. A later cleanup step can collapse
- * the two into one source.
+ * pipeline is kept self-contained. Collapse the two into one source if the
+ * monolith path is ever retired.
  *
  * Date is computed at call time — never baked into the prompt constants.
  */

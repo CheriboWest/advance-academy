@@ -7,7 +7,7 @@ and UK COMPANIES (COMPANY, JOB TITLE/LINK) — with real cell hyperlinks, and
 checks what reaches the database: raw cells preserved, blank-row grouping,
 LinkedIn display text never taken as a URL, no guessed company names, and job
 text kept as source information. Matching itself is tested in SQL
-(supabase/tests/048_contact_import.test.sql).
+(supabase/tests/049_contact_import.test.sql).
 """
 
 from __future__ import annotations

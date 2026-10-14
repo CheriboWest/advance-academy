@@ -142,7 +142,7 @@ async def send_email(
             if update.status_code >= 400 and _is_missing_column_error(update):
                 logger.warning(
                     "outreach_emails is missing tracking columns — apply "
-                    "infra/supabase/migrations/0012_outreach_tracking.sql "
+                    "supabase/migrations/035_ch0012_outreach_tracking.sql "
                     "(or, if a migration tool already believes that one "
                     "applied, its idempotent repair: "
                     "0015_repair_outreach_tracking.sql). Falling back to a "

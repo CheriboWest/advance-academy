@@ -49,7 +49,7 @@ function inList(ids: string[]): string {
  * that call — and already redirected anyone unauthenticated — milliseconds
  * earlier, so a second one bought nothing but latency on every coach page
  * load. This project signs access tokens with asymmetric ES256 keys (see
- * apps/api/app/auth.py, which verifies the same tokens against the same
+ * backend-python/app/auth.py, which verifies the same tokens against the same
  * published JWKS), and for asymmetric keys getClaims() verifies the signature
  * locally via WebCrypto with no request at all. This is still a real
  * cryptographic check, so the defence-in-depth the layout wants is intact —
@@ -134,17 +134,22 @@ export async function getDashboardData(): Promise<CoachDashboardData> {
   // reflect only the coach's visible companies.
   const hiddenIds = await getHiddenCompanyIds(supabase);
 
+  // Since migration 048 the view lists job-less companies too (open_jobs = 0);
+  // the dashboard is about companies hiring, so every query keeps to those.
   let totalQuery = supabase
     .from("public_company_summary")
-    .select("*", { count: "exact", head: true });
+    .select("*", { count: "exact", head: true })
+    .gt("open_jobs", 0);
   let highScoreQuery = supabase
     .from("public_company_summary")
     .select("*", { count: "exact", head: true })
+    .gt("open_jobs", 0)
     .gte("lead_score", HIGH_SCORE_THRESHOLD);
   // The view exposes no timestamp column, so we approximate "recent" by id.
   let recentQuery = supabase
     .from("public_company_summary")
     .select(COMPANY_COLUMNS)
+    .gt("open_jobs", 0)
     .order("id", { ascending: false })
     .limit(10);
   let topHiringQuery = supabase
@@ -165,6 +170,7 @@ export async function getDashboardData(): Promise<CoachDashboardData> {
     let query = supabase
       .from("public_company_summary")
       .select("id, open_jobs")
+      .gt("open_jobs", 0)
       .order("id")
       .range(from, to);
     if (hiddenIds.length) query = query.not("id", "in", inList(hiddenIds));
@@ -252,9 +258,11 @@ export async function getCoachCompanies(
       .range(from, to);
 
     if (hidden) {
+      // Every removed company, hiring or not, so any of them can be restored.
       companiesQuery = companiesQuery.in("id", hiddenIds);
-    } else if (hiddenIds.length) {
-      companiesQuery = companiesQuery.not("id", "in", inList(hiddenIds));
+    } else {
+      companiesQuery = companiesQuery.gt("open_jobs", 0); // hiring, as before 048
+      if (hiddenIds.length) companiesQuery = companiesQuery.not("id", "in", inList(hiddenIds));
     }
     return companiesQuery;
   });
@@ -288,30 +296,23 @@ const SPONSORED_COMPANY_COLUMNS =
   `${SPONSORED_COMPANY_LIST_COLUMNS}, ai_summary, ai_summary_generated_at`;
 
 /**
- * All companies for the Sponsored Companies list. Also the company set the
- * Outreach placeholder's "choose a company" step reuses — see
- * app/coach/(workspace)/outreach/page.tsx — so this stays free of anything
- * Sponsored-Companies-specific (sponsorship status and contact counts are
- * fetched separately and merged in by each page, not baked in here).
+ * Companies hiring, for the Outreach "choose a company" step
+ * (app/coach/(workspace)/outreach/new). The Sponsored Companies list pages
+ * server-side through backend-python instead (GET /sponsors/companies).
  */
 export async function getSponsoredCompanies(): Promise<SponsoredCompanyRow[]> {
   const supabase = await createSupabaseServerClient();
 
-  // Concurrent, not sequential. The hidden set used to be awaited first purely
-  // so the companies query could be narrowed with `not.in`, which put two
-  // round trips to Supabase in series at the very front of a page that shows
-  // nothing until both have landed. Excluding the hidden ids in JS instead
-  // lets the two overlap.
-  //
-  // ponytail: this fetches the coach's hidden companies only to drop them,
-  // so the row count crossing the wire is the *unfiltered* company set,
-  // paged past PostgREST's 1000-row cap by selectAll.
+  // ponytail: fetches the coach's hidden companies only to drop them in JS, and
+  // pages every hiring company past PostgREST's 1000-row cap; move this picker
+  // to the paged endpoint if it gets slow.
   const [hiddenIds, data] = await Promise.all([
     getHiddenCompanyIds(supabase),
     selectAll((from, to) =>
       supabase
         .from("public_company_summary")
         .select(SPONSORED_COMPANY_LIST_COLUMNS)
+        .gt("open_jobs", 0) // hiring companies, as before migration 048
         .order("name", { ascending: true })
         .order("id")
         .range(from, to)
@@ -342,15 +343,16 @@ export async function getSponsoredCompanyContext(
 ): Promise<SponsoredCompanyContext | null> {
   const supabase = await createSupabaseServerClient();
 
-  // A company the coach has removed is treated as not found in their workspace.
-  const hiddenIds = await getHiddenCompanyIds(supabase);
-  if (hiddenIds.includes(companyId)) return null;
-
-  const { data, error } = await supabase
-    .from("public_company_summary")
-    .select(SPONSORED_COMPANY_COLUMNS)
-    .eq("id", companyId)
-    .maybeSingle();
+  // A company the coach removed still opens (flagged `hidden`): the Contact
+  // Directory links to it, and its contacts are only editable here.
+  const [hiddenIds, { data, error }] = await Promise.all([
+    getHiddenCompanyIds(supabase),
+    supabase
+      .from("public_company_summary")
+      .select(SPONSORED_COMPANY_COLUMNS)
+      .eq("id", companyId)
+      .maybeSingle(),
+  ]);
 
   if (error) throw new Error(error.message);
   if (!data) return null;
@@ -369,6 +371,7 @@ export async function getSponsoredCompanyContext(
     ai_summary: (data.ai_summary as string | null) ?? null,
     ai_summary_generated_at:
       (data.ai_summary_generated_at as string | null) ?? null,
+    hidden: hiddenIds.includes(companyId),
   };
 }
 

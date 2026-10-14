@@ -1,14 +1,11 @@
-// Regression test: given the real batch contact-count data for one company
-// with 2 contacts, the real <SponsoredCompaniesList> card must render
-// "2 contacts" — not "0 contacts". This is the render-layer half of the
-// "0 contacts" bug (see lib/contacts.test.ts for the data-layer half, where
-// the actual root cause — a missing batch-size cap on getContactCounts — was
-// found and fixed).
+// <SponsoredCompaniesList> renders one server-side page (GET /sponsors/companies):
+// contact counts arrive with the rows, badges stream in after, and the
+// pagination links keep the search and scope.
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SponsoredCompaniesList } from "@/features/career-hub/components/coach/sponsored-companies-list";
-import type { SponsoredCompanyRow } from "@/features/career-hub/lib/types";
+import type { SponsoredCompanyPage } from "@/features/career-hub/lib/types";
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => (
@@ -20,15 +17,23 @@ afterEach(cleanup);
 
 const ABSOLUTE_RECRUIT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
-const ABSOLUTE_RECRUIT: SponsoredCompanyRow = {
+const ABSOLUTE_RECRUIT: SponsoredCompanyPage["companies"][number] = {
   company_id: ABSOLUTE_RECRUIT_ID,
   slug: "absolute-recruit",
   name: "Absolute Recruit",
   location: "London",
   sector: "Recruitment",
-  open_jobs: 3,
+  open_jobs: 0,
   lead_score: 50,
+  contacts: 2,
 };
+
+function pageOf(
+  companies: SponsoredCompanyPage["companies"],
+  total = companies.length
+): SponsoredCompanyPage {
+  return { companies, total, page_size: 30 };
+}
 
 function card(): HTMLElement {
   const article = screen.getByText("Absolute Recruit").closest("article");
@@ -36,92 +41,44 @@ function card(): HTMLElement {
   return article as HTMLElement;
 }
 
-describe("SponsoredCompaniesList contact count", () => {
-  // The counts now arrive as a promise the server hands over unawaited, so
-  // these await the streamed-in text rather than reading it synchronously.
-  it("renders the real contact count (2) for a company that has 2 contacts", async () => {
-    render(
-      <SponsoredCompaniesList
-        companies={[ABSOLUTE_RECRUIT]}
-        contactCounts={Promise.resolve({ [ABSOLUTE_RECRUIT_ID]: 2 })}
-      />
-    );
-
-    await screen.findByText("2 contacts");
-    expect(card().textContent).not.toContain("0 contacts");
+describe("SponsoredCompaniesList", () => {
+  it("renders the contact count that came with the row, and 0 open jobs", () => {
+    render(<SponsoredCompaniesList data={pageOf([ABSOLUTE_RECRUIT])} scope="licensed" q="" page={1} />);
+    expect(card().textContent).toContain("2 contacts");
+    expect(card().textContent).toContain("0 open jobs");
   });
 
-  it("falls back to 0 only when the company is genuinely absent from the count map", async () => {
-    render(
-      <SponsoredCompaniesList
-        companies={[ABSOLUTE_RECRUIT]}
-        contactCounts={Promise.resolve({})}
-      />
+  it("states the total as licensed sponsors by default and companies for scope=all", () => {
+    const { unmount } = render(
+      <SponsoredCompaniesList data={pageOf([ABSOLUTE_RECRUIT], 41)} scope="licensed" q="" page={1} />
     );
-
-    await screen.findByText("0 contacts");
+    expect(screen.getByText(/41 licensed sponsors/)).toBeTruthy();
+    unmount();
+    render(<SponsoredCompaniesList data={pageOf([ABSOLUTE_RECRUIT], 41)} scope="all" q="" page={1} />);
+    expect(screen.getByText(/41 companies/)).toBeTruthy();
   });
 
-  // The streaming split (page.tsx hands the counts over as an unawaited
-  // promise) introduced a third state that did not exist before: in flight.
-  // It must not read as "0 contacts", which is a real answer for a company
-  // with none — hence the placeholder rather than a default of 0.
-  it("shows a placeholder, not '0 contacts', while the counts are still in flight", () => {
+  it("shows a badge placeholder while the statuses stream", () => {
     render(
       <SponsoredCompaniesList
-        companies={[ABSOLUTE_RECRUIT]}
-        contactCounts={new Promise(() => {})}
-      />
-    );
-
-    expect(card().textContent).toContain("— contacts");
-    expect(card().textContent).not.toContain("0 contacts");
-  });
-});
-
-// The counts line answers "how many companies, how many of them sponsored?"
-// without a request of its own — it reads the same streamed status batch the
-// badges do, so it must agree with them and must not invent a 0 while the
-// batch is still in flight.
-describe("SponsoredCompaniesList counts line", () => {
-  const BETA: SponsoredCompanyRow = {
-    ...ABSOLUTE_RECRUIT,
-    company_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-    slug: "beta-ltd",
-    name: "Beta Ltd",
-  };
-  const GAMMA: SponsoredCompanyRow = {
-    ...ABSOLUTE_RECRUIT,
-    company_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
-    slug: "gamma-plc",
-    name: "Gamma Plc",
-  };
-
-  it("counts the companies, and only the licensed ones as sponsors", async () => {
-    render(
-      <SponsoredCompaniesList
-        companies={[ABSOLUTE_RECRUIT, BETA, GAMMA]}
-        sponsorshipStatuses={Promise.resolve({
-          [ABSOLUTE_RECRUIT_ID]: { status: "licensed", stale: false, checked_at: null },
-          [BETA.company_id]: { status: "ambiguous", stale: false, checked_at: null },
-          // GAMMA absent from the batch entirely — not licensed either.
-        })}
-      />
-    );
-
-    await screen.findByText(/1 licensed sponsor$/);
-    expect(screen.getByText(/3 companies/)).toBeTruthy();
-  });
-
-  it("shows a placeholder, not '0 licensed sponsors', while the statuses stream", () => {
-    render(
-      <SponsoredCompaniesList
-        companies={[ABSOLUTE_RECRUIT, BETA]}
+        data={pageOf([ABSOLUTE_RECRUIT])}
+        scope="licensed"
+        q=""
+        page={1}
         sponsorshipStatuses={new Promise(() => {})}
       />
     );
+    expect(card().querySelector(".animate-pulse")).not.toBeNull();
+  });
 
-    expect(screen.getByText(/— licensed sponsors/)).toBeTruthy();
-    expect(screen.queryByText(/0 licensed sponsors/)).toBeNull();
+  it("pages with links that keep search and scope", () => {
+    render(<SponsoredCompaniesList data={pageOf([ABSOLUTE_RECRUIT], 95)} scope="all" q="acme" page={2} />);
+    expect(screen.getByText("Page 2 of 4")).toBeTruthy();
+    expect(screen.getByText("Next").closest("a")?.getAttribute("href")).toBe(
+      "/coach/sponsored-companies?scope=all&q=acme&page=3"
+    );
+    expect(screen.getByText("Previous").closest("a")?.getAttribute("href")).toBe(
+      "/coach/sponsored-companies?scope=all&q=acme"
+    );
   });
 });

@@ -61,7 +61,14 @@ export default async function SponsoredCompanyPage({
   }
 
   const backLink = (
-    <BackLink href="/coach/sponsored-companies">Back to sponsored companies</BackLink>
+    <>
+      <BackLink href="/coach/sponsored-companies">Back to sponsored companies</BackLink>
+      {company.hidden && (
+        <p className="text-sm text-muted-foreground">
+          You removed this company from your lists. Restore it from Companies → Removed.
+        </p>
+      )}
+    </>
   );
 
   // Sponsorship status, jobs, contacts and outreach history are each a

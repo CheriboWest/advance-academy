@@ -22,7 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
-import { ProgressBar } from '@/shared/hooks/progress-bar'
+import { ProgressBar } from '@/shared/components/progress-bar'
 import { useDreamCompany, STEP_LABELS } from '@/features/dream-company/hooks/use-dream-company'
 import { SaveJobButton } from '@/features/job-tracking/components/save-job-button'
 
@@ -94,7 +94,7 @@ import type {
   TargetRole,
   ExaJobListing,
   CareerRoadmap,
-} from '@/types/dream-company'
+} from '@advance-academy/contracts/dream-company'
 
 // ─── Constants ───────────────────────────────────────────────
 

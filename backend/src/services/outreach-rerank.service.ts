@@ -1,6 +1,6 @@
 import { assertLlmConfigured, createAnthropicClient, getFeatureModel, withRetry } from '../lib/llm-anthropic.js';
 import { newCostBucket, type CostBucket } from '../lib/cost-tracker.js';
-import type { EnrichmentCard, EnrichmentRequest } from '../types/outreach.js';
+import type { EnrichmentCard, EnrichmentRequest } from '@advance-academy/contracts/outreach';
 
 export type RerankCategory = 'hiring' | 'social' | 'insight';
 

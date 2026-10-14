@@ -1,4 +1,4 @@
-import type { DreamCompanyInput, ProfileAnalysis, TargetRole, ExaJobListing } from '../../types/dream-company.js';
+import type { DreamCompanyInput, ProfileAnalysis, TargetRole, ExaJobListing } from '@advance-academy/contracts/dream-company';
 
 export function buildProfileAnalysisPrompt(profile: DreamCompanyInput): string {
   return `You are a senior career strategist with 20 years of experience assessing professionals across industries. You are direct, honest, and never inflate assessments to be encouraging.

@@ -10,7 +10,7 @@
 import { assertLlmConfigured, createAnthropicClient } from '../../lib/llm-anthropic.js';
 import { cvAgentModel, CV_LLM_CLIENT_OPTIONS } from './models.js';
 import { runJsonTask } from '../../lib/run-json-task.js';
-import { CV_BULLETS_PROMPT } from '../../prompts/cv-bullets.prompt.js';
+import { CV_BULLETS_PROMPT } from './prompts/cv-bullets.prompt.js';
 import { todayInstruction } from './today-instruction.js';
 import { normalizeBullets } from './normalizers.js';
 import type { BulletEvaluation, RewriteSuggestion } from '@advance-academy/contracts/cv-optimizer';

@@ -221,8 +221,8 @@ select pg_temp.check('refusals left every job active',
 -- ---------------------------------------------------------------------------
 -- Apply, limited to the fully covered source
 -- ---------------------------------------------------------------------------
-select pg_temp.check('company c2 is listed publicly before its only job closes',
-  exists (select 1 from public.public_company_summary where id = '00000000-0000-0000-0000-0000000000c2'));
+select pg_temp.check('company c2 shows one open job before its only job closes',
+  (select open_jobs from public.public_company_summary where id = '00000000-0000-0000-0000-0000000000c2') = 1);
 
 select pg_temp.check('apply for adzuna closes exactly the two stale jobs (no legacy without the flag)',
   (select (r->>'closed')::int = 2 and not (r->>'dry_run')::boolean
@@ -232,8 +232,9 @@ select pg_temp.check('closed stale jobs carry reason stale; nothing else closed'
   (select array_agg(id order by id) from public.jobs where not is_active) = array[pg_temp.j(10), pg_temp.j(23)]
   and (select bool_and(closed_reason = 'stale' and closed_at is not null) from public.jobs where not is_active));
 
-select pg_temp.check('a company whose only job closed leaves public_company_summary',
-  not exists (select 1 from public.public_company_summary where id = '00000000-0000-0000-0000-0000000000c2'));
+-- 048: the company stays listed, with no open jobs.
+select pg_temp.check('a company whose only job closed stays in public_company_summary with 0 open jobs',
+  (select open_jobs from public.public_company_summary where id = '00000000-0000-0000-0000-0000000000c2') = 0);
 
 -- (Run the apply and inspect the rows in separate statements: one statement
 -- cannot see the rows its own function call just updated.)

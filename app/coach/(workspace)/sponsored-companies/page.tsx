@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { TriangleAlert } from "lucide-react";
 
-import { getSponsoredCompanies } from "@/features/career-hub/lib/coach";
-import { getContactCounts } from "@/features/career-hub/lib/contacts";
-import { getSponsorshipStatuses } from "@/features/career-hub/lib/sponsorship";
+import {
+  getSponsoredCompanyPage,
+  getSponsorshipStatuses,
+} from "@/features/career-hub/lib/sponsorship";
 import type {
   CompanySponsorshipStatusCompact,
-  SponsoredCompanyRow,
+  SponsoredCompanyPage,
 } from "@/features/career-hub/lib/types";
 import { SponsoredCompaniesList } from "@/features/career-hub/components/coach/sponsored-companies-list";
 import { EmptyState } from "@/features/career-hub/components/empty-state";
@@ -15,22 +16,41 @@ export const metadata: Metadata = {
   title: "Sponsored Companies",
 };
 
-export default async function SponsoredCompaniesPage() {
-  let companies: SponsoredCompanyRow[];
+interface SponsoredCompaniesPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
 
+function first(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value) ?? "";
+}
+
+export default async function SponsoredCompaniesPage({
+  searchParams,
+}: SponsoredCompaniesPageProps) {
+  const params = await searchParams;
+  const scope = first(params.scope) === "all" ? "all" : "licensed";
+  const q = first(params.q).trim().slice(0, 100);
+  const page = Math.max(1, Math.floor(Number(first(params.page))) || 1);
+
+  const header = (
+    <header className="space-y-1">
+      <p className="text-sm text-muted-foreground">
+        Visa sponsorship status, licence details, open jobs and contacts.
+      </p>
+    </header>
+  );
+
+  // One page, filtered and counted in SQL (migration 048) — contact counts
+  // come with the rows, so there is no second request carrying every id.
+  let data: SponsoredCompanyPage;
   try {
-    companies = await getSponsoredCompanies();
+    data = await getSponsoredCompanyPage({ scope, q, page });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "An unexpected error occurred.";
     return (
       <div className="space-y-4">
-        <header className="space-y-1">
-          <p className="text-sm text-muted-foreground">
-            Visa sponsorship status, licence details, open jobs and contacts
-            for every company.
-          </p>
-        </header>
+        {header}
         <EmptyState
           icon={TriangleAlert}
           title="We couldn't load companies"
@@ -40,40 +60,24 @@ export default async function SponsoredCompaniesPage() {
     );
   }
 
-  // Two batched requests for every company on the page — not one per
-  // company, which a list this size would otherwise turn into an N+1.
-  //
-  // Deliberately NOT awaited: these are two cross-service round trips to the
-  // FastAPI backend, and awaiting them here held the whole page behind them —
-  // the segment's loading.tsx skeleton stayed up for seconds while the cards
-  // themselves had everything they needed from `companies` alone. Handed to
-  // the list as promise props instead, so the grid paints immediately and the
-  // badges/counts stream in behind it.
-  //
-  // `.catch` because neither helper is as total as its "never throws" contract
-  // suggests: both guard only their `fetch`, while the
-  // createSupabaseServerClient()/getSession() calls above it sit outside that
-  // try. Unhandled, a rejection here would reach the browser as an unhandled
-  // promise rejection instead of the empty map the list already renders fine.
-  const companyIds = companies.map((company) => company.company_id);
+  // Badges for this page's 30 companies only. Not awaited: the cards paint
+  // first and the badges stream in. `.catch` because the session lookup inside
+  // sits outside the helper's own try.
   const sponsorshipStatuses: Promise<
     Record<string, CompanySponsorshipStatusCompact>
-  > = getSponsorshipStatuses(companyIds).catch(() => ({}));
-  const contactCounts: Promise<Record<string, number>> =
-    getContactCounts(companyIds).catch(() => ({}));
+  > = getSponsorshipStatuses(data.companies.map((c) => c.company_id)).catch(
+    () => ({})
+  );
 
   return (
     <div className="space-y-4">
-      <header className="space-y-1">
-        <p className="text-sm text-muted-foreground">
-          Visa sponsorship status, licence details, open jobs and contacts
-          for every company.
-        </p>
-      </header>
+      {header}
       <SponsoredCompaniesList
-        companies={companies}
+        data={data}
+        scope={scope}
+        q={q}
+        page={page}
         sponsorshipStatuses={sponsorshipStatuses}
-        contactCounts={contactCounts}
       />
     </div>
   );

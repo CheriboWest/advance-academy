@@ -1,8 +1,7 @@
-"""Pure text-cleaning and classification helpers for the AI TEAM contacts
-importer. No I/O, no Supabase, no openpyxl — every function here takes plain
-strings/values and returns plain values, so they're unit-testable directly
-against the concrete messy cells found in the source workbook (see
-test_contacts_import.py).
+"""Pure text-cleaning and classification helpers for the contact import
+wizard (mapping.py). Written for the AI TEAM contacts workbook, whose messy
+cells they were tested against. No I/O, no Supabase, no openpyxl — every
+function here takes plain strings/values and returns plain values.
 """
 
 from __future__ import annotations

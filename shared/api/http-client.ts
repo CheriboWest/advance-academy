@@ -18,7 +18,7 @@ export class HttpClientError extends Error {
     // Codes are literals mirrored from backend/src/lib/user-access.ts — two strings don't
     // justify a @advance-academy/contracts export.
     if (status === 403 && (payload.code === 'ACCOUNT_PENDING' || payload.code === 'ACCOUNT_REJECTED')) {
-      redirectToPending(payload.code)
+      redirectToPending()
     }
   }
 }
@@ -26,7 +26,7 @@ export class HttpClientError extends Error {
 // No redirect loop: /api/account/me is the gate's one exemption (backend/src/main.ts) so it
 // never returns these codes, and /pending is excluded below. Guarded on `window` because
 // this class is also thrown server-side inside the app/api/* proxy routes.
-function redirectToPending(code: 'ACCOUNT_PENDING' | 'ACCOUNT_REJECTED') {
+function redirectToPending() {
   if (typeof window === 'undefined') return
   if (window.location.pathname.startsWith('/pending')) return
 

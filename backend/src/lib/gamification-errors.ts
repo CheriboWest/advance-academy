@@ -1,5 +1,5 @@
 /**
- * Maps the SQLSTATEs migration 047's functions raise (docs/GAMIFICATION_V2.md)
+ * Maps the SQLSTATEs migration 047's functions raise (supabase/CLAUDE.md)
  * to the HTTP errors routes already understand (`statusCode` + `code`).
  *
  *   GC001  credits exhausted            → 429 CREDIT_EXHAUSTED

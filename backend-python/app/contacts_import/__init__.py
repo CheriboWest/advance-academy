@@ -1,7 +1,7 @@
-"""One-off importer for AI TEAM - CURRENT CONTACTS.xlsx.
+"""Bulk company/contact import wizard (/coach/contacts/import).
 
-See scripts/import_ai_team_contacts.py for the CLI entrypoint and
-app/contacts_import/importer.py for the orchestration. Nothing here is wired
-into the FastAPI app or the crawler — this package is only ever invoked by
-that script.
+upload.py reads an .xlsx/.csv into raw rows; mapping.py turns them into
+company/contact candidates using the cleaning rules in clean.py and rows.py.
+Matching and the import itself are SQL (migration 049); the routes are
+app/routers/contact_imports.py. See CLAUDE.md in this folder.
 """

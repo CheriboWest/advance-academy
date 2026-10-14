@@ -504,7 +504,7 @@ end
 $$;
 
 -- Optional, NOT run by this migration — schedule only after reading
--- docs/JOB_EXPIRY.md. Needs the pg_cron extension (Database → Extensions).
+-- backend-python/CLAUDE.md (Job expiry). Needs the pg_cron extension (Database → Extensions).
 --
 --   select cron.schedule('close-expired-jobs', '7 * * * *',
 --                        $$select public.close_expired_jobs()$$);

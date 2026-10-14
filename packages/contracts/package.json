@@ -5,16 +5,21 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./admin": "./src/admin.ts",
     "./admin-person": "./src/admin-person.ts",
     "./coaching": "./src/coaching.ts",
     "./contacts": "./src/contacts.ts",
     "./cover-letter": "./src/cover-letter.ts",
     "./cv-optimizer": "./src/cv-optimizer.ts",
+    "./dream-company": "./src/dream-company.ts",
     "./engagement": "./src/engagement.ts",
     "./gamification": "./src/gamification.ts",
+    "./interview-prep": "./src/interview-prep.ts",
     "./job-tracking": "./src/job-tracking.ts",
     "./jobs": "./src/jobs.ts",
-    "./leads": "./src/leads.ts"
+    "./leads": "./src/leads.ts",
+    "./outreach": "./src/outreach.ts",
+    "./tool-results": "./src/tool-results.ts"
   },
   "types": "./src/index.ts"
 }

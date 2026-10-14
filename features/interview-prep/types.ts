@@ -1,56 +1,25 @@
 // Interview-prep feature types.
 // (ViewName / NavItem live in @/shared/types/navigation)
 
+import type {
+  FeedbackItem,
+  FeedbackReport,
+  InterviewContext,
+  IRSScore,
+  PersonaId,
+} from '@advance-academy/contracts/interview-prep'
+
+export type {
+  FeedbackItem,
+  FeedbackReport,
+  InterviewContext,
+  InterviewerPersona,
+  IRSScore,
+  IRSScorePart,
+  PersonaId,
+} from '@advance-academy/contracts/interview-prep'
+
 export type InterviewStep = 'setup' | 'persona' | 'interview' | 'report'
-
-export type PersonaId =
-  | 'skeptic'
-  | 'mentor'
-  | 'executive'
-  | 'technical'
-  | 'culture'
-
-export interface InterviewerPersona {
-  id: PersonaId
-  name: string
-  title: string
-  description: string
-  style: string
-  avatar: string
-  systemPrompt: string
-}
-
-export interface InterviewContext {
-  cvText: string
-  jobTitle: string
-  jobDescription: string
-  companyName: string
-  companyUrl: string
-  extraLinks: string[]
-  /**
-   * Optional questions the interviewer draws from first (sprint F6b). Sent with
-   * every turn, not just at start — see the backend type for why.
-   */
-  questionBank?: string[]
-  /**
-   * Set when the mock was launched from an approved coaching pack (ticket T7).
-   * Travels with every turn and reaches the evaluation, which is what ties the
-   * result back to the session the coach reads it against.
-   */
-  coachingSessionId?: string
-}
-
-export interface IRSScorePart {
-  score: number
-  rationale: string
-}
-
-export interface IRSScore {
-  integrity: IRSScorePart
-  relevance: IRSScorePart
-  substance: IRSScorePart
-  overall: number
-}
 
 export interface MissingEvidencePrompt {
   bulletId: string | null
@@ -117,20 +86,6 @@ export interface InterviewMessage {
   assessmentId?: string
 }
 
-export interface FeedbackItem {
-  title: string
-  detail: string
-}
-
-export interface FeedbackReport {
-  sessionId: string
-  overallIRS: IRSScore
-  strengths: FeedbackItem[]
-  improvements: FeedbackItem[]
-  summary: string
-  generatedAt: number
-}
-
 export interface InterviewSession {
   id: string
   personaId: PersonaId
@@ -140,42 +95,6 @@ export interface InterviewSession {
   messages: InterviewMessage[]
   context: InterviewContext
   finalReport?: FeedbackReport
-}
-
-// API DTOs
-
-export interface StartSessionRequest {
-  personaId: PersonaId
-  context: InterviewContext
-}
-
-export interface StartSessionResponse {
-  sessionId: string
-  openingQuestion: string
-  dbSessionId?: string
-  questionId?: string
-}
-
-export interface SendMessageRequest {
-  sessionId: string
-  content: string
-  messageHistory: Array<{ role: 'interviewer' | 'candidate'; content: string }>
-  personaId: PersonaId
-  context: InterviewContext
-  dbSessionId?: string
-  questionId?: string
-}
-
-export interface SendMessageResponse {
-  reply: string
-  irsScore: IRSScore
-  isComplete: boolean
-  assessmentId?: string
-  nextQuestionId?: string
-}
-
-export interface EvaluateSessionResponse {
-  report: FeedbackReport
 }
 
 // History view DTOs

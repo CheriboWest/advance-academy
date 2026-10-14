@@ -5,12 +5,12 @@ import { getAuthHeaders } from '@/shared/auth/get-auth-headers'
 import type {
   BookRestDayResponse,
   GamificationGoals,
-  GamificationResponse,
+  GamificationSummary,
   UpdateGamificationGoalsRequest,
 } from '@advance-academy/contracts/gamification'
 
-export async function getGamification(): Promise<GamificationResponse> {
-  return fetchJson<GamificationResponse>('/api/gamification', {
+export async function getGamification(): Promise<GamificationSummary> {
+  return fetchJson<GamificationSummary>('/api/gamification', {
     method: 'GET',
     headers: await getAuthHeaders(),
     timeoutMs: 15000,

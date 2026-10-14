@@ -24,7 +24,7 @@ import type {
 } from '@advance-academy/contracts/cv-optimizer';
 import type { ApiErrorResponse, JobStatus, JobStatusResponse } from '@advance-academy/contracts/jobs';
 import { getLlmConfig } from '../config/llm.js';
-import { getCvOptimizerFeatures, isGamificationV2Enabled } from '../config/features.js';
+import { getCvOptimizerFeatures } from '../config/features.js';
 import { assertLlmConfigured, createAnthropicClient, getFeatureModel } from '../lib/llm-anthropic.js';
 import { CV_LLM_CLIENT_OPTIONS } from './cv-agents/models.js';
 import { getSupabase, isMissingColumnError } from '../lib/supabase.js';
@@ -738,7 +738,7 @@ const REFERENCE_USAGE_INSTRUCTIONS = [
   '- Keep the output ATS-friendly and concise.',
 ].join('\n');
 
-export async function buildLlmAnalysis(body: AnalyzeCvRequest): Promise<AnalyzeCvResult | null> {
+async function buildLlmAnalysis(body: AnalyzeCvRequest): Promise<AnalyzeCvResult | null> {
   console.log('🐘 Using Monolith');
   assertLlmConfigured('cvOptimizer');
 
@@ -968,11 +968,11 @@ export async function createCvAnalysisJob(body: AnalyzeCvRequest, userId: string
   // orphan (migration 018). The CV body is deliberately not in here — it lives
   // once in `cv_versions`, reached via `cv_version_id`, which the background
   // job fills in.
-  // Gamification v2: the run names its card at creation (047's saved_job_id),
+  // Gamification (047): the run names its card at creation (047's saved_job_id),
   // which is what makes a completed run count as tailoring that card. 047's G1
   // trigger refuses another user's card; that run simply goes unlinked, as a
   // foreign card id always has (linkSavedJob below changes nothing either).
-  let savedJobId = isGamificationV2Enabled() ? body.savedJobId ?? null : null;
+  let savedJobId = body.savedJobId ?? null;
   const insertJob = (withInput: boolean) =>
     supabase
       .from('cv_analysis_jobs')
@@ -1003,7 +1003,7 @@ export async function createCvAnalysisJob(body: AnalyzeCvRequest, userId: string
   // Migrations here are applied by hand, so code can reach production before its
   // schema does. Losing `input_json` for a while is a shame; failing every CV
   // analysis until someone opens the SQL editor is an outage. Fall back once,
-  // loudly, and let `npm run check:migration-018` be how this gets noticed.
+  // loudly, so the error log is how this gets noticed.
   if (error && isMissingColumnError(error)) {
     console.error('[cv-optimizer] cv_analysis_jobs.input_json is missing — run migration 018.');
     savedJobId = null; // a schema without 018 has no 047 either

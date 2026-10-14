@@ -3,9 +3,9 @@ candidates (company name, job, contact) plus a list of reasons a row (or
 part of it) couldn't be safely turned into data — never a guess passed
 through silently.
 
-Pure functions only — no I/O. `workbook.py` supplies the raw cell values
-(post forward-fill); `plan.py` turns the candidates this module produces
-into match/create/dedupe decisions against the database.
+Pure functions only — no I/O. The import wizard's mapping.py supplies the
+raw cell values; matching against the database happens in SQL
+(contact_import_classify, migration 049), never here.
 """
 
 from __future__ import annotations
@@ -132,7 +132,7 @@ def extract_company_name(
     # A genuine display name. For JOB AGENCIES UK the cell's own hyperlink
     # (when present) is the agency's homepage — captured as a candidate
     # `website` for a newly-created company only (never overwrites an
-    # existing one; see plan.py).
+    # existing one).
     website = hyperlink if allow_domain_fallback and hyperlink else None
     return CompanyNameResult(name=text, website=website)
 
@@ -156,8 +156,7 @@ def _extract_job(text_value: object, hyperlink: Optional[str]) -> tuple[Optional
     if hyperlink is None:
         # Text with no link: in the observed data this is always a note,
         # never a job title — a real job title in this column always came
-        # with a link to it (see contacts_import README in the importer
-        # module docstring / the report's "mapping decisions" section).
+        # with a link to it.
         return None, None, text
 
     if looks_like_url(text):
@@ -329,8 +328,8 @@ def extract_company_row(
     company: CompanyNameResult,
     job_cell: RawCell,
 ) -> CompanyRowOutcome:
-    """UK COMPANIES: COMPANY, JOB TITLE/LINK. No forward-fill (see
-    workbook.py) and no contact columns at all."""
+    """UK COMPANIES: COMPANY, JOB TITLE/LINK. No forward-fill and no
+    contact columns at all."""
     ambiguous: list[str] = []
     if company.ambiguous_reason:
         ambiguous.append(company.ambiguous_reason)

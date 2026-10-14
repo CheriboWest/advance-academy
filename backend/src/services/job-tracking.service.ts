@@ -7,7 +7,6 @@ import type {
 } from '@advance-academy/contracts/job-tracking';
 import { getSupabase } from '../lib/supabase.js';
 import { jobUrlKey, type ValidCreate } from '../lib/job-tracking.js';
-import { isGamificationV2Enabled } from '../config/features.js';
 import { mapGamificationDbError } from '../lib/gamification-errors.js';
 
 /**
@@ -156,23 +155,6 @@ async function findByUrlKey(userId: string, urlKey: string): Promise<string | nu
   return (data as { id: string } | null)?.id ?? null;
 }
 
-async function appendEvent(
-  userId: string,
-  jobId: string,
-  fromStatus: SavedJobStatus | null,
-  toStatus: SavedJobStatus,
-  note: string | null,
-): Promise<void> {
-  const { error } = await getSupabase().from('job_events').insert({
-    job_id: jobId,
-    user_id: userId,
-    from_status: fromStatus,
-    to_status: toStatus,
-    note,
-  });
-  if (error) throw dbError('record job event', error);
-}
-
 export async function createSavedJob(userId: string, input: ValidCreate): Promise<SavedJob> {
   const urlKey = jobUrlKey(input.jobUrl);
   if (urlKey) {
@@ -195,15 +177,9 @@ export async function createSavedJob(userId: string, input: ValidCreate): Promis
     notes: input.notes ?? null,
   };
 
-  // Gamification v2: the card and its first event in one transaction (047's
-  // create_saved_job), so the save is never captured without its event.
-  const { data, error } = isGamificationV2Enabled()
-    ? await getSupabase().rpc('create_saved_job', { p_user: userId, p_card: card }).single()
-    : await getSupabase()
-        .from('saved_jobs')
-        .insert({ user_id: userId, ...card })
-        .select(JOB_COLUMNS)
-        .single();
+  // The card and its first event in one transaction (047's create_saved_job),
+  // so the save is never captured for gamification without its event.
+  const { data, error } = await getSupabase().rpc('create_saved_job', { p_user: userId, p_card: card }).single();
 
   if (error) {
     // Two saves raced past the pre-check; the unique index caught the second.
@@ -214,9 +190,7 @@ export async function createSavedJob(userId: string, input: ValidCreate): Promis
     throw dbError('save job', error);
   }
 
-  const job = toJob(data as unknown as SavedJobRow);
-  if (!isGamificationV2Enabled()) await appendEvent(userId, job.id, null, job.status, null);
-  return job;
+  return toJob(data as unknown as SavedJobRow);
 }
 
 async function ownsCvVersion(userId: string, cvVersionId: string): Promise<boolean> {
@@ -278,51 +252,16 @@ export async function updateSavedJob(
 }
 
 /**
- * Move a card to a new status and log the move. Any transition is allowed —
- * people skip stages (applied → interview) and correct mistakes — so the rule is
- * "record everything", not "enforce a ladder". Moving to `applied` stamps
- * `applied_at` the first time. Re-sending the current status is a no-op.
+ * Move a card to a new status and log the move, through 047's
+ * change_job_status: card update and event in one transaction, the card
+ * row-locked so two clicks can't log two events. Any transition is allowed —
+ * people skip stages (applied → interview) and correct mistakes. Moving to
+ * `applied` stamps `applied_at` the first time; re-sending the current status
+ * is a no-op. The RPC returns NULL for a card that isn't this user's —
+ * PostgREST may render that as null or as a row of nulls, so both read as
+ * "not found".
  */
 export async function changeJobStatus(
-  userId: string,
-  jobId: string,
-  input: ChangeJobStatusRequest,
-): Promise<SavedJob | null> {
-  if (isGamificationV2Enabled()) return changeJobStatusV2(userId, jobId, input);
-
-  const current = await fetchJob(userId, jobId);
-  if (!current) return null;
-  if (current.status === input.status) return current;
-
-  const update: Record<string, unknown> = {
-    status: input.status,
-    updated_at: new Date().toISOString(),
-  };
-  if (input.status === 'applied' && !current.appliedAt) {
-    update.applied_at = new Date().toISOString();
-  }
-
-  const { data, error } = await getSupabase()
-    .from('saved_jobs')
-    .update(update)
-    .eq('user_id', userId)
-    .eq('id', jobId)
-    .select(JOB_COLUMNS)
-    .maybeSingle();
-  if (error) throw dbError('change job status', error);
-  if (!data) return null;
-
-  await appendEvent(userId, jobId, current.status, input.status, input.note ?? null);
-  return toJob(data as unknown as SavedJobRow);
-}
-
-/**
- * The same move through 047's change_job_status: card update and event in one
- * transaction, the card row-locked so two clicks can't log two events. It
- * returns NULL for a card that isn't this user's — PostgREST may render that as
- * null or as a row of nulls, so both read as "not found".
- */
-async function changeJobStatusV2(
   userId: string,
   jobId: string,
   input: ChangeJobStatusRequest,

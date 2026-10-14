@@ -42,7 +42,6 @@ before(async () => {
   if (skip) return;
   process.env.SUPABASE_URL = url;
   process.env.SUPABASE_SERVICE_ROLE_KEY = key;
-  process.env.GAMIFICATION_V2_ENABLED = 'true';
   m = {
     sb: await import('../lib/supabase.js'),
     jobs: await import('./job-tracking.service.js'),
@@ -101,7 +100,6 @@ test('change_job_status: applied stamps applied_at; the same status is a no-op; 
 
 test('summary: quests assigned, intents judged, XP/coins/achievements/journey read back', { skip }, async () => {
   const s = await m.gam.getGamificationSummary(U);
-  assert.equal(s.enabled, true);
   assert.deepEqual(s.quests.map((q) => q.key), ['practice_answer', 'save_jobs', 'tailor_cv']);
   // save +2 and a quick application +5 (no tailored CV).
   assert.equal(s.xp.total, 7);
@@ -191,7 +189,7 @@ test('admin skip: a non-admin actor is refused by the database', { skip }, async
   });
 });
 
-test('engagement with v2 on reads but never writes the points ledger', { skip }, async () => {
+test('engagement never writes the points ledger', { skip }, async () => {
   await m.engagement.getEngagement(U);
   const ledger = await db().from('points_ledger').select('points').eq('user_id', U);
   assert.deepEqual(ledger.data, []);

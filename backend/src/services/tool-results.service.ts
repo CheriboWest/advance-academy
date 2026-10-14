@@ -18,22 +18,8 @@ import { getSupabase, isMissingColumnError } from '../lib/supabase.js';
  * but only the stored `ProfileAnalysis` says where the student actually stands.
  */
 
-export type ToolName = 'cv' | 'dream' | 'interview' | 'coaching' | 'cover_letter';
-
-/** Row shape for the list view — deliberately without the heavy `result` blob. */
-export interface ToolResultSummary {
-  id: string;
-  tool: ToolName;
-  input_summary: string | null;
-  created_at: string;
-}
-
-export interface ToolResultDetail extends ToolResultSummary {
-  result: unknown;
-  /** What was fed in. Null for rows written before migration 018. */
-  input_json?: unknown;
-  cv_version_id?: string | null;
-}
+import type { ToolName, ToolResultDetail, ToolResultSummary } from '@advance-academy/contracts/tool-results';
+export type { ToolName, ToolResultDetail, ToolResultSummary };
 
 /**
  * Rows above this serialise to more than we want to keep per run. A Dream

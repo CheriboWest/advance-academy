@@ -4,7 +4,7 @@ import { extractErrorDetail } from "@/features/career-hub/lib/contacts-api";
 
 /**
  * Client for the bulk import wizard (backend-python
- * app/routers/contact_imports.py, migration 048). Browser-only: it reads the
+ * app/routers/contact_imports.py, migration 049). Browser-only: it reads the
  * coach's session from the browser Supabase client, like contacts-api.ts.
  */
 

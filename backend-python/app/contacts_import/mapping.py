@@ -17,7 +17,7 @@ the wizard's rules:
   never turned into a job or a contact field.
 
 Matching and normalization for duplicates live in the database (migration
-048, ci_norm_*) so preview and commit can never disagree.
+049, ci_norm_*) so preview and commit can never disagree.
 """
 
 from __future__ import annotations

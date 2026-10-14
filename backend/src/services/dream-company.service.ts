@@ -10,7 +10,7 @@ import type {
   CareerRoadmap,
   ExaJobListing,
   RoadmapResponse,
-} from '../types/dream-company.js';
+} from '@advance-academy/contracts/dream-company';
 import {
   buildCareerRoadmapPrompt,
   buildDreamCompanyCvParseInstructions,

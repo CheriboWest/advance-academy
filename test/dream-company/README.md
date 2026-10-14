@@ -6,6 +6,9 @@ Automated + documented checks that grade every M1 acceptance criterion (the spri
 - **Harness:** [`m1-ac-check.mjs`](./m1-ac-check.mjs) — drives the real HTTP surface and
   prints an AC-by-AC pass/fail matrix.
 - Run from the repo root. Requires Node 18+ (uses global `fetch`/`FormData`/`Blob`).
+- It calls the JSON steps (`/api/dream-company/{analyze,roles,roadmap}`). The Next.js app in
+  this repo only proxies their `/stream` variants, so against a frontend built from here use
+  `--base` with the backend URL.
 
 ## Run it
 

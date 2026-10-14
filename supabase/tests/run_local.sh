@@ -8,7 +8,7 @@
 # ($PG_SUPERUSER, default supabase_admin). Migrations run as the non-superuser
 # `postgres` role, the way hosted Supabase runs them (see MIGRATION_ROLE). Every migration in
 # supabase/migrations is applied in file-name order (except the schema_* dumps),
-# 046-048 are applied a second time to prove they are re-runnable, then their
+# 046, 047 and 049 are applied a second time to prove they are re-runnable, then their
 # SQL tests run, then the two-session concurrency tests.
 set -euo pipefail
 
@@ -46,15 +46,15 @@ while IFS= read -r f; do
 done < <(cd "$migrations" && LC_ALL=C ls -1 -- *.sql | grep -v '^schema_')
 echo "applied $applied migrations to $SCRATCH_DB as $MIGRATION_ROLE"
 
-for f in 046_job_expiry.sql 047_gamification.sql 048_contact_import.sql; do
+for f in 046_job_expiry.sql 047_gamification.sql 049_contact_import.sql; do
   if ! out=$("${owner_psql[@]}" -f "$migrations/$f" 2>&1 >/dev/null); then
     echo "FAILED re-applying $f:"; echo "$out"; exit 1
   fi
 done
-echo "re-applied 046, 047 and 048 cleanly"
+echo "re-applied 046, 047 and 049 cleanly"
 
 status=0
-for t in 046_job_expiry 047_gamification 048_contact_import; do
+for t in 046_job_expiry 047_gamification 049_contact_import; do
   if out=$("${su_psql[@]}" -d "$SCRATCH_DB" -f "$here/$t.test.sql" 2>&1); then
     echo "$out" | grep -E 'PASSED' || true
     echo "  $(echo "$out" | grep -c '^psql:.*NOTICE:  ok') checks in $t"
@@ -63,7 +63,7 @@ for t in 046_job_expiry 047_gamification 048_contact_import; do
   fi
 done
 
-for t in 047_gamification_concurrency 048_contact_import_concurrency; do
+for t in 047_gamification_concurrency 049_contact_import_concurrency; do
   if [ -x "$here/$t.test.sh" ]; then
     PG_SUPERUSER="$PG_SUPERUSER" SCRATCH_DB="$SCRATCH_DB" "$here/$t.test.sh" || status=1
   fi

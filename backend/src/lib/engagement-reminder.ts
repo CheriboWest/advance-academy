@@ -1,16 +1,7 @@
 import { TERMINAL_SAVED_JOB_STATUSES } from '@advance-academy/contracts/job-tracking';
 import { getSupabase } from './supabase.js';
 import { isEmailSendingEnabled, sendEmail } from './email.js';
-import {
-  addDays,
-  escapeHtml,
-  taskProgress,
-  unsubscribeSecret,
-  unsubscribeToken,
-  utcDay,
-  weekStartUtc,
-} from './engagement.js';
-import { weekCounts } from '../services/engagement.service.js';
+import { escapeHtml, unsubscribeSecret, unsubscribeToken, utcDay } from './engagement.js';
 
 /**
  * Reminder emails (App 1 "Reminders"). Runs in the Fastify process on the same
@@ -18,16 +9,12 @@ import { weekCounts } from '../services/engagement.service.js';
  *
  *   follow_ups    — from 08:00 UTC, one email on the day a tracked job's
  *                   follow-up falls due.
- *   weekly_tasks  — Friday to Sunday from 09:00 UTC, once a week, when some of
- *                   the week's tasks are still open.
  *
- * Both go out in one email when they coincide. A row in `reminder_sends` is
+ * (The `weekly_tasks` email went with the v1 weekly goals; gamification's
+ * quests replaced them.) A row in `reminder_sends` is
  * claimed BEFORE sending; its unique key is what stops a second backend
  * instance (or the next hourly pass) sending the same reminder again. A failed
  * send releases the claim so the next pass retries.
- *
- * ponytail: per-user task counts are three queries each, run once a week per
- * user. Batch them into one SQL function if the student list reaches thousands.
  */
 
 const INTERVAL_MS = 60 * 60 * 1000;
@@ -101,22 +88,6 @@ function followUpSection(jobs: DueJob[]): string {
       <p style="margin:0 0 16px;">A short, polite check-in keeps you on the recruiter's radar. Update the card in <a href="${appUrl('/jobs')}">your tracker</a> once it's sent.</p>`;
 }
 
-function tasksSection(
-  open: Array<{
-    title: string;
-    progress: number;
-    target: number;
-    points: number;
-  }>,
-): string {
-  const items = open
-    .map((t) => `<li>${escapeHtml(t.title)} — ${t.progress}/${t.target} (+${t.points} pts)</li>`)
-    .join('');
-  return `<p style="margin:0 0 8px;font-weight:bold;">Still open this week</p>
-      <ul style="margin:0 0 16px;padding-left:20px;">${items}</ul>
-      <p style="margin:0 0 16px;">There's still time to finish them before Sunday night.</p>`;
-}
-
 export async function runReminderPass(now = new Date()): Promise<void> {
   if (!isEmailSendingEnabled() || running) return;
   running = true;
@@ -124,13 +95,7 @@ export async function runReminderPass(now = new Date()): Promise<void> {
     const sb = getSupabase();
     const today = utcDay(now);
     const hour = now.getUTCHours();
-    const isoDay = ((now.getUTCDay() + 6) % 7) + 1; // Mon=1 … Sun=7
-    const weekStart = weekStartUtc(now);
-    const weekKey = utcDay(weekStart);
-
-    const doFollowUps = hour >= 8;
-    const doWeekly = isoDay >= 5 && hour >= 9;
-    if (!doFollowUps && !doWeekly) return;
+    if (hour < 8) return;
 
     const { data: users, error } = await sb
       .from('users')
@@ -143,56 +108,28 @@ export async function runReminderPass(now = new Date()): Promise<void> {
     if (recipients.length === 0) return;
 
     const dueByUser = new Map<string, DueJob[]>();
-    if (doFollowUps) {
-      const { data: due, error: dueErr } = await sb
-        .from('saved_jobs')
-        .select('user_id, title, company_name')
-        .eq('next_follow_up_at', today)
-        .not('status', 'in', `(${TERMINAL_SAVED_JOB_STATUSES.join(',')})`);
-      if (dueErr) throw new Error(`reminder follow-ups: ${dueErr.message}`);
-      for (const job of (due ?? []) as DueJob[]) {
-        dueByUser.set(job.user_id, [...(dueByUser.get(job.user_id) ?? []), job]);
-      }
-    }
-
-    // Skip the task queries for anyone already reminded this week.
-    const alreadyWeekly = new Set<string>();
-    if (doWeekly) {
-      const { data: sent, error: sentErr } = await sb
-        .from('reminder_sends')
-        .select('user_id')
-        .eq('kind', 'weekly_tasks')
-        .eq('period_key', weekKey);
-      if (sentErr) throw new Error(`reminder sends: ${sentErr.message}`);
-      for (const row of (sent ?? []) as Array<{ user_id: string }>) alreadyWeekly.add(row.user_id);
+    const { data: due, error: dueErr } = await sb
+      .from('saved_jobs')
+      .select('user_id, title, company_name')
+      .eq('next_follow_up_at', today)
+      .not('status', 'in', `(${TERMINAL_SAVED_JOB_STATUSES.join(',')})`);
+    if (dueErr) throw new Error(`reminder follow-ups: ${dueErr.message}`);
+    for (const job of (due ?? []) as DueJob[]) {
+      dueByUser.set(job.user_id, [...(dueByUser.get(job.user_id) ?? []), job]);
     }
 
     for (const user of recipients) {
-      const sections: string[] = [];
-      const claimed: Array<[string, string]> = [];
+      const jobs = dueByUser.get(user.id);
+      if (!jobs?.length) continue;
+      let claimed = false;
       // One student's bad row must not stop everyone else's reminders.
       try {
-        const due = dueByUser.get(user.id);
-        if (due?.length && (await claim(user.id, 'follow_ups', today))) {
-          sections.push(followUpSection(due));
-          claimed.push(['follow_ups', today]);
-        }
-
-        if (doWeekly && !alreadyWeekly.has(user.id)) {
-          const open = taskProgress(await weekCounts(user.id, weekStart, addDays(weekStart, 7))).filter((t) => !t.done);
-          if (open.length && (await claim(user.id, 'weekly_tasks', weekKey))) {
-            sections.push(tasksSection(open));
-            claimed.push(['weekly_tasks', weekKey]);
-          }
-        }
-
-        if (sections.length === 0) continue;
+        if (!(await claim(user.id, 'follow_ups', today))) continue;
+        claimed = true;
         const result = await sendEmail({
           to: user.email,
-          subject: claimed.some(([kind]) => kind === 'follow_ups')
-            ? 'Follow-ups due today'
-            : 'Your job search this week',
-          html: buildHtml(user.full_name, sections, user.id),
+          subject: 'Follow-ups due today',
+          html: buildHtml(user.full_name, [followUpSection(jobs)], user.id),
           headers: {
             'List-Unsubscribe': `<${unsubscribeUrl(user.id, true)}>`,
             'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
@@ -201,7 +138,7 @@ export async function runReminderPass(now = new Date()): Promise<void> {
         if (!result.ok) throw new Error(result.error ?? 'send failed');
       } catch (err) {
         console.warn(`[reminders] ${user.id}: ${err instanceof Error ? err.message : err}`);
-        await Promise.all(claimed.map(([kind, key]) => release(user.id, kind, key)));
+        if (claimed) await release(user.id, 'follow_ups', today);
       }
     }
   } catch (err) {

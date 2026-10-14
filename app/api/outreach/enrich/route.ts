@@ -1,6 +1,6 @@
 import { getProxyAuthToken } from '@/shared/api/proxy-auth'
 import { NextResponse } from 'next/server'
-import type { EnrichmentRequest, ExperienceLevel } from '@/types/outreach'
+import type { EnrichmentRequest, ExperienceLevel } from '@advance-academy/contracts/outreach'
 import { enrichOutreachWithBackend } from '@/shared/api/backend-client'
 import { HttpClientError } from '@/shared/api/http-client'
 

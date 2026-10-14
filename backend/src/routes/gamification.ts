@@ -1,6 +1,4 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { GamificationResponse } from '@advance-academy/contracts/gamification';
-import { isGamificationV2Enabled } from '../config/features.js';
 import { isAdminUser } from '../lib/admin.js';
 import { isValidIsoDay, validateGoalsPatch, validateSeenKeys, validateSkipReason } from '../lib/gamification.js';
 import {
@@ -14,20 +12,13 @@ import {
 } from '../services/gamification.service.js';
 
 /**
- * Gamification v2 (migration 047, docs/GAMIFICATION_V2.md). No LLM, no credits.
- *
- * Behind GAMIFICATION_V2_ENABLED: while it is off, GET /api/gamification answers
- * `{ enabled: false }` (the frontend keeps the weekly-tasks panel) and every
- * other route here is a 404. Rewards are judged by the database from what the
- * student did; nothing here can grant XP or coins directly.
+ * Gamification (migration 047, supabase/CLAUDE.md). No LLM, no credits.
+ * Rewards are judged by the database from what the student did; nothing here
+ * can grant XP or coins directly.
  */
 
 function unauthorized(reply: FastifyReply) {
   return reply.code(401).send({ code: 'UNAUTHORIZED', message: 'Authentication required.' });
-}
-
-function disabled(reply: FastifyReply) {
-  return reply.code(404).send({ code: 'GAMIFICATION_DISABLED', message: 'Not available.' });
 }
 
 function sendError(error: unknown, request: FastifyRequest, reply: FastifyReply, fallback: string) {
@@ -59,9 +50,8 @@ const PER_USER = {
 export async function registerGamificationRoutes(app: FastifyInstance) {
   app.get('/api/gamification', PER_USER, async (request, reply) => {
     if (!request.userId) return unauthorized(reply);
-    if (!isGamificationV2Enabled()) return { enabled: false } satisfies GamificationResponse;
     try {
-      return (await getGamificationSummary(request.userId)) satisfies GamificationResponse;
+      return await getGamificationSummary(request.userId);
     } catch (error) {
       return sendError(error, request, reply, 'Could not load your progress.');
     }
@@ -69,7 +59,6 @@ export async function registerGamificationRoutes(app: FastifyInstance) {
 
   app.patch('/api/gamification/goals', PER_USER, async (request, reply) => {
     if (!request.userId) return unauthorized(reply);
-    if (!isGamificationV2Enabled()) return disabled(reply);
     const parsed = validateGoalsPatch(request.body);
     if (!parsed.ok) return reply.code(400).send({ code: 'INVALID_REQUEST', message: parsed.message });
     try {
@@ -81,7 +70,6 @@ export async function registerGamificationRoutes(app: FastifyInstance) {
 
   app.post('/api/gamification/rest-days', PER_USER, async (request, reply) => {
     if (!request.userId) return unauthorized(reply);
-    if (!isGamificationV2Enabled()) return disabled(reply);
     const day = (request.body as { day?: unknown } | null)?.day;
     if (!isValidIsoDay(day)) return reply.code(400).send({ code: 'INVALID_REQUEST', message: 'day must be YYYY-MM-DD.' });
     try {
@@ -93,7 +81,6 @@ export async function registerGamificationRoutes(app: FastifyInstance) {
 
   app.post('/api/gamification/achievements/seen', PER_USER, async (request, reply) => {
     if (!request.userId) return unauthorized(reply);
-    if (!isGamificationV2Enabled()) return disabled(reply);
     const parsed = validateSeenKeys(request.body);
     if (!parsed.ok) return reply.code(400).send({ code: 'INVALID_REQUEST', message: parsed.message });
     try {
@@ -106,7 +93,6 @@ export async function registerGamificationRoutes(app: FastifyInstance) {
 
   app.get('/api/gamification/coins', PER_USER, async (request, reply) => {
     if (!request.userId) return unauthorized(reply);
-    if (!isGamificationV2Enabled()) return disabled(reply);
     const limit = Number((request.query as { limit?: string } | undefined)?.limit);
     try {
       return await getCoinHistory(request.userId, Number.isFinite(limit) ? limit : 50);
@@ -118,7 +104,6 @@ export async function registerGamificationRoutes(app: FastifyInstance) {
   // ── Admin: rewards that failed 10 times stop their user's queue until skipped.
   app.get('/api/admin/gamification/stuck', async (request, reply) => {
     if (!(await isAdminUser(request.userId))) return reply.code(403).send({ code: 'FORBIDDEN', message: 'Admin access required.' });
-    if (!isGamificationV2Enabled()) return disabled(reply);
     try {
       return { intents: await listStuckIntents() };
     } catch (error) {
@@ -128,7 +113,6 @@ export async function registerGamificationRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { seq: string } }>('/api/admin/gamification/intents/:seq/skip', async (request, reply) => {
     if (!(await isAdminUser(request.userId))) return reply.code(403).send({ code: 'FORBIDDEN', message: 'Admin access required.' });
-    if (!isGamificationV2Enabled()) return disabled(reply);
     const seq = Number(request.params.seq);
     if (!Number.isSafeInteger(seq) || seq <= 0) return reply.code(400).send({ code: 'INVALID_REQUEST', message: 'Unknown reward.' });
     const parsed = validateSkipReason(request.body);

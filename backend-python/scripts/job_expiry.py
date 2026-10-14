@@ -13,7 +13,7 @@
     python scripts/job_expiry.py stale --include-legacy --source adzuna
 
     # Actually close them. The database refuses unless every crawled search has
-    # enough successful fetches for every --source; see docs/JOB_EXPIRY.md.
+    # enough successful fetches for every --source; see backend-python/CLAUDE.md.
     python scripts/job_expiry.py stale --apply
 
 Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. Prints the database's own

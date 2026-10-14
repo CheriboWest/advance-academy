@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { listToolResults, getToolResult } from '../api/frontend-client'
-import type { ToolResultsFilters } from '@/types/tool-results'
+import type { ToolResultsFilters } from '@advance-academy/contracts/tool-results'
 
 export function useToolResults(filters: ToolResultsFilters = {}) {
   return useQuery({

@@ -93,6 +93,49 @@ async function processRewards(userId: string): Promise<void> {
   if (error) console.error(`[gamification] processing rewards for ${userId} failed:`, error.code, error.message);
 }
 
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+let sweeping = false;
+
+/**
+ * Judge everyone's waiting rewards without them opening a page. Before this,
+ * rewards were only processed by GET /api/gamification, so a student who never
+ * opened home or /jobs on a day lost that day's quest progress (quest rows
+ * didn't exist yet). Today's quests are assigned first for the same reason.
+ *
+ * ponytail: an action in the last 5 minutes before the student's midnight is
+ * judged the next day, after that day's quests replaced it; move this into a
+ * pg_cron job that assigns quests for intent.local_day if anyone notices.
+ */
+export async function processPendingRewards(): Promise<void> {
+  if (sweeping) return;
+  sweeping = true;
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from('reward_intents')
+      .select('user_id')
+      .eq('state', 'pending')
+      .or(`next_attempt_at.is.null,next_attempt_at.lte.${new Date().toISOString()}`)
+      .limit(PAGE);
+    if (error) throw readError('list pending rewards', error);
+    const users = [...new Set((data ?? []).map((r) => (r as { user_id: string }).user_id))];
+    for (const userId of users) {
+      const quests = await sb.rpc('ensure_daily_quests', { p_user: userId });
+      if (quests.error) console.error(`[gamification] assigning quests for ${userId} failed:`, quests.error.message);
+      await processRewards(userId);
+    }
+  } catch (error) {
+    console.error('[gamification] reward sweep failed:', error);
+  } finally {
+    sweeping = false;
+  }
+}
+
+export function startRewardSweep(): void {
+  void processPendingRewards();
+  setInterval(() => void processPendingRewards(), SWEEP_INTERVAL_MS).unref();
+}
+
 export async function getGamificationSummary(userId: string, now = new Date()): Promise<GamificationSummary> {
   const sb = getSupabase();
 
@@ -129,7 +172,6 @@ export async function getGamificationSummary(userId: string, now = new Date()): 
   const restThisMonth = streak.filter((r) => r.kind === 'rest' && r.day.slice(0, 7) === today.slice(0, 7)).length;
 
   return {
-    enabled: true,
     today,
     xp: { total: xpTotal, thisWeek: xpWeek, weeklyTarget: cfg?.weekly_targets?.[goals.intensity] ?? 0 },
     streak: {

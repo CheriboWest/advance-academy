@@ -16,7 +16,7 @@ changing or committing a batch is limited to the admin who uploaded it
 (checked here and again inside contact_import_commit).
 
 Matching, duplicate detection and the import itself run in the database
-(migration 048) so the preview an admin approves and the commit that writes
+(migration 049) so the preview an admin approves and the commit that writes
 can never disagree.
 """
 

@@ -9,9 +9,9 @@ means the request never reached this router's code; something upstream of
 the handler (path, method, or route registration) didn't match.
 
 Traced end to end on this branch:
-  - apps/web/lib/contacts-api.ts calls `POST {baseUrl}/contacts` (create),
+  - features/career-hub/lib/contacts-api.ts calls `POST {baseUrl}/contacts` (create),
     `PUT {baseUrl}/contacts/{id}` (update), `DELETE {baseUrl}/contacts/{id}`.
-  - apps/web/lib/contacts.ts calls `GET {baseUrl}/contacts?company_id=...`.
+  - features/career-hub/lib/contacts.ts calls `GET {baseUrl}/contacts?company_id=...`.
   - app/routers/contacts.py registers exactly those four routes under
     `APIRouter(prefix="/contacts")`.
   - app/main.py calls `app.include_router(contacts.router)`.
@@ -121,12 +121,12 @@ if CONTACTS_API_TS.exists():
           bool(delete_call) and delete_call.group(1) == "/contacts/${contactId}",
           f"got {delete_call.group(1) if delete_call else None!r}")
 else:
-    check("apps/web/lib/contacts-api.ts exists (path-agreement check)", False,
+    check("features/career-hub/lib/contacts-api.ts exists (path-agreement check)", False,
           f"not found at {CONTACTS_API_TS}")
 
 if CONTACTS_TS.exists():
     source = CONTACTS_TS.read_text()
-    # getContacts/getContactCounts/getContactDirectory all go through one shared
+    # getContacts/getContactsForCompanies/getContactDirectory all go through one shared
     # fetchContacts(pathAndQuery) helper — check that helper hits exactly
     # /contacts<pathAndQuery>, and that the
     # callers build a query starting with the param name the backend expects
@@ -146,22 +146,10 @@ if CONTACTS_TS.exists():
           bool(get_contacts_query) and get_contacts_query.group(1) == "company_id=",
           f"got {get_contacts_query.group(1) if get_contacts_query else None!r}")
 
-    # getContactCounts() itself no longer calls fetchContacts directly — it
-    # was refactored to go through getContactsForCompanies() (added for the
-    # Outreach activity dashboard, which needs the same batch of full contact
-    # objects, not just counts). Check the query construction where it now
-    # actually lives, rather than re-pinning the old direct call shape.
-    #
-    # getContactsForCompanies() itself chunks by MAX_COMPANY_IDS_PER_LIST (see
-    # test_sponsored_companies_contact_count_cache.py for why: a single
-    # request over that cap 422s in full, silently zeroing every company's
-    # count) — so this no longer matches one direct top-level `return
-    # fetchContacts(...)`; it's a `.map()` over chunks instead. Match the
-    # function's body up to the next top-level export (getContactCounts,
-    # always the next function in this file) rather than one exact call shape.
+    # getContactsForCompanies() chunks the ids (a `.map()` over chunks), so
+    # match its body up to the end of the file rather than one call shape.
     get_for_companies_fn = re.search(
-        r"function getContactsForCompanies\([\s\S]*?"
-        r"(?=\nexport async function getContactCounts)",
+        r"function getContactsForCompanies\([\s\S]*",
         source,
     )
     check("getContactsForCompanies() exists", bool(get_for_companies_fn))
@@ -179,11 +167,8 @@ if CONTACTS_TS.exists():
           and "CHUNK_SIZE" in get_for_companies_fn.group(0)
           and ".map(" in get_for_companies_fn.group(0))
 
-    check("getContactCounts() is built on getContactsForCompanies(), not a "
-          "second direct call — one place constructs the company_ids= query",
-          bool(re.search(r"getContactCounts[\s\S]*?await getContactsForCompanies\(", source)))
 else:
-    check("apps/web/lib/contacts.ts exists (path-agreement check)", False,
+    check("features/career-hub/lib/contacts.ts exists (path-agreement check)", False,
           f"not found at {CONTACTS_TS}")
 
 # ---------------------------------------------------------------------------

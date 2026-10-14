@@ -1,11 +1,11 @@
 /**
- * buildLlmAnalysisV2 — dormant end-to-end orchestrator for the CV Optimizer
- * agent architecture (step 5b).
+ * buildLlmAnalysisV2 — the CV Optimizer's parallel agent pipeline, used by
+ * analyzeCv() when CV_OPTIMIZER_USE_V2=true (otherwise the monolith
+ * buildLlmAnalysis() runs).
  *
- * Architectural proof only: it assembles a complete AnalyzeCvResult from the
- * four dormant agents plus the existing (now exported) buildAtsCheck,
- * computeCompositeScore, and generateActionPlan — WITHOUT normalizeResult (the
- * agents own normalization) and WITHOUT touching the live monolith path.
+ * It assembles a complete AnalyzeCvResult from the four agents plus the
+ * existing buildAtsCheck, computeCompositeScore, and generateActionPlan —
+ * WITHOUT normalizeResult (the agents own normalization).
  *
  * Reliability now mirrors the monolith: a no-LLM short-circuit returns
  * buildFallbackAnalysis() before any work, the four agents and the ATS pipeline

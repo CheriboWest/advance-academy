@@ -18,7 +18,7 @@ export interface CompanySummary {
   lead_score: number | null;
   open_jobs: number | null;
   /** Short, factual summary generated from stored data — see
-   *  apps/api/app/companies/summarizer.py. `null` until first generated
+   *  backend-python/app/companies/summarizer.py. `null` until first generated
    *  (company creation / crawl enrichment / manual refresh); never
    *  generated client-side. */
   ai_summary: string | null;
@@ -49,18 +49,6 @@ export interface Job {
   source_url?: string | null;
 }
 
-/**
- * A row from the `coach_company_meta` table — private, per-coach metadata for a
- * company. Protected by RLS keyed to `coach_user_id = auth.uid()`.
- */
-export interface CoachCompanyMeta {
-  coach_user_id: string;
-  company_id: string;
-  starred: boolean;
-  hidden: boolean;
-  notes: string | null;
-}
-
 /** A company summary merged with the current coach's private metadata. */
 export interface CoachCompanyRow {
   company_id: string;
@@ -84,6 +72,13 @@ export interface SponsoredCompanyRow {
   lead_score: number;
 }
 
+/** One page of the coach Sponsored Companies list (GET /sponsors/companies). */
+export interface SponsoredCompanyPage {
+  companies: Array<SponsoredCompanyRow & { contacts: number }>;
+  total: number;
+  page_size: number;
+}
+
 /** Company context shown on the Sponsored Company detail page's overview,
  *  and reused as the Outreach research panel's company summary. */
 export interface SponsoredCompanyContext {
@@ -96,6 +91,8 @@ export interface SponsoredCompanyContext {
   lead_score: number;
   ai_summary: string | null;
   ai_summary_generated_at: string | null;
+  /** The coach removed it from their lists (it still opens). */
+  hidden?: boolean;
 }
 
 /**
@@ -158,7 +155,7 @@ export interface OutreachActivityRow {
 /**
  * The coach-facing sponsorship status for one company, from
  * GET /sponsors/companies/{id}. One of five normalized states; see
- * apps/api/app/schemas.py CompanySponsorshipStatus for the full contract
+ * backend-python/app/schemas.py CompanySponsorshipStatus for the full contract
  * (in particular why `licensed` needs no `stale` check while the others do).
  */
 export type SponsorshipStatus =

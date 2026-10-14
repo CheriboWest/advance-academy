@@ -1,0 +1,12 @@
+# features/gamification — streaks, quests, XP, Career Coins
+
+- The home page renders `components/progress-panel.tsx` (the panel plus
+  `engagement/components/reminders.tsx`: follow-ups due and the reminder-email
+  switch); `/jobs` shows a one-line streak/XP strip. Both render nothing for
+  coaches (`useAccount().isAdmin`).
+- Rewards are decided in the database (see `supabase/CLAUDE.md`), never in the UI —
+  the client only reads the summary and posts goals, rest days and "achievement seen".
+- Any mutation that can earn a reward must invalidate the `['gamification']` query
+  (job-tracking mutations already do).
+- Career Coins are earn-only and are **not** credits.
+- Proxies live in `app/api/gamification/` (`forward.ts` is their shared forwarder).

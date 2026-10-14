@@ -13,7 +13,3 @@ export function irsScoreLabel(score: number): string {
   if (score >= 3) return 'Weak'
   return 'Poor'
 }
-
-export function computeOverall(i: number, r: number, s: number): number {
-  return Math.round((i * 0.3 + r * 0.3 + s * 0.4) * 10) / 10
-}

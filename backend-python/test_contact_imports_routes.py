@@ -6,7 +6,7 @@ are minted with a throwaway ES256 key served as the project's JWKS, two
 admins come from ADMIN_USER_IDS, and a student is anyone else (the users
 lookup is stubbed to "not an admin"). Supabase is an in-memory stand-in that
 records what the router writes; the matching/commit SQL itself is tested in
-supabase/tests/048_contact_import.test.sql and end to end in
+supabase/tests/049_contact_import.test.sql and end to end in
 test_contact_import_e2e.py.
 """
 

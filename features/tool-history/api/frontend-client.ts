@@ -6,7 +6,7 @@ import type {
   ToolResultDetailResponse,
   ToolResultsFilters,
   ToolResultsListResponse,
-} from '@/types/tool-results'
+} from '@advance-academy/contracts/tool-results'
 
 // Tool run history (sprint F5). Calls the Next.js proxy, which forwards the
 // Supabase bearer token; the backend scopes every row to the signed-in user.

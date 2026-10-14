@@ -10,7 +10,7 @@ import type {
   ManualContext,
   OutreachRequest,
   OutreachResult,
-} from '@/types/outreach'
+} from '@advance-academy/contracts/outreach'
 import type { OutreachFormData } from '@/features/outreach/types'
 import { HttpClientError } from '@/shared/api/http-client'
 import {

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { filterLiveJobs } from './job-liveness.js';
-import type { ExaJobListing } from '../types/dream-company.js';
+import type { ExaJobListing } from '@advance-academy/contracts/dream-company';
 
 const realFetch = globalThis.fetch;
 

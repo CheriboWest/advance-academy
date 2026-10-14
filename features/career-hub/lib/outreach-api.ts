@@ -8,7 +8,7 @@ export interface GeneratedOutreach {
 
 /**
  * Structured context for one outreach email, mirroring OutreachRequest in
- * apps/api/app/schemas.py field-for-field. Only `companyName` is required —
+ * backend-python/app/schemas.py field-for-field. Only `companyName` is required —
  * everything else is optional context that, when present, the backend
  * prompt actually uses (see `_build_user_prompt` in app/routers/ai.py):
  * sponsorship is only ever mentioned in the generated email when

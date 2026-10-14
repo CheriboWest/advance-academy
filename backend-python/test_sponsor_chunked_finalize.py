@@ -23,7 +23,6 @@ finished staging in a run production actually hit (id
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
 
 import httpx
 

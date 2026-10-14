@@ -3,26 +3,33 @@
 import Link from 'next/link'
 import { Flame, Sparkles } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ThisWeek } from '@/features/engagement/components/this-week'
+import { useAccount } from '@/shared/hooks/use-account'
+import { Reminders } from '@/features/engagement/components/reminders'
 import { useGamification } from '../hooks/use-gamification'
 import { GamificationPanel } from './gamification-panel'
 
 /**
- * Home dashboard block. The backend decides: with GAMIFICATION_V2_ENABLED it
- * answers a progress summary and this shows the v2 panel; otherwise (or if the
- * summary can't load) it is the existing weekly-tasks block, unchanged.
+ * Home dashboard block: streak, quests, XP and coins. Coaches (admins) have no
+ * goals to chase, so they get nothing; nor does anyone whose summary can't load.
  */
 export function ProgressPanel() {
   const { data, isLoading } = useGamification()
-  if (isLoading) return <Skeleton className="h-64 w-full rounded-xl" />
-  if (data?.enabled) return <GamificationPanel data={data} />
-  return <ThisWeek />
+  const account = useAccount()
+  if (isLoading || account.isLoading) return <Skeleton className="h-64 w-full rounded-xl" />
+  if (!data || account.data?.isAdmin) return null
+  return (
+    <>
+      <GamificationPanel data={data} />
+      <Reminders />
+    </>
+  )
 }
 
-/** /jobs: a one-line streak/XP strip, only when v2 is on — /jobs has no panel otherwise. */
+/** /jobs: a one-line streak/XP strip — /jobs has no panel otherwise. */
 export function JobsProgressStrip() {
   const { data } = useGamification()
-  if (!data?.enabled) return null
+  const account = useAccount()
+  if (!data || account.data?.isAdmin !== false) return null
   return (
     <Link
       href="/"

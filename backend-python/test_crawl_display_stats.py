@@ -16,7 +16,6 @@ Covers the scenarios from the crawl-complete-summary audit:
 
 from __future__ import annotations
 
-from app.crawler import pipeline
 from app.crawler.models import NormalizedJob, compute_display_stats
 from app.crawler.normalize import company_slug, content_hash, normalize_city
 from app.routers.discover import _row_to_status

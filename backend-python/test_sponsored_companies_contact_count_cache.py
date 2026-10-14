@@ -5,7 +5,7 @@ test_contacts_routes.py).
 
 Root cause
 ----------
-The Sponsored Companies list's contact count (apps/web/lib/contacts.ts's
+The Sponsored Companies list's contact count (features/career-hub/lib/contacts.ts's
 getContactCounts, rendered by components/coach/sponsored-companies-list.tsx)
 and the /contacts batch endpoint it calls (app/routers/contacts.py) were both
 already correct — the FK-enforced `contacts.company_id` uuid column and the
@@ -79,7 +79,7 @@ if ACTIONS_TS.exists():
               actions_src,
           )))
 else:
-    check("apps/web/app/coach/(workspace)/sponsored-companies/actions.ts exists", False)
+    check("app/coach/(workspace)/sponsored-companies/actions.ts exists", False)
 
 # ---------------------------------------------------------------------------
 # 2. contacts-section.tsx actually calls it after a save and after a delete —
@@ -115,7 +115,7 @@ if CONTACTS_SECTION_TSX.exists():
           "successful delete — same cache invalidation as a save",
           bool(handle_delete) and "revalidateContactPaths(companyId)" in handle_delete.group(1))
 else:
-    check("apps/web/components/coach/contacts-section.tsx exists", False)
+    check("features/career-hub/components/coach/contacts-section.tsx exists", False)
 
 print()
 if _failures:

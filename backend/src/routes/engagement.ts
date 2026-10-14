@@ -4,7 +4,7 @@ import { unsubscribeSecret, verifyUnsubscribeToken } from '../lib/engagement.js'
 import { getEngagement, setEmailReminders } from '../services/engagement.service.js';
 
 /**
- * Progress & Engagement. GET/PATCH are ordinary authed routes; no LLM, no
+ * Reminder emails. GET/PATCH read and set the switch: ordinary authed routes; no LLM, no
  * credits. The unsubscribe route is public (listed in main.ts skipPaths): it is
  * hit from an email link or by a mail provider's one-click unsubscribe, with the
  * HMAC token standing in for the login.
@@ -25,7 +25,7 @@ export async function registerEngagementRoutes(app: FastifyInstance) {
       return await getEngagement(request.userId);
     } catch (error) {
       request.log.error(error);
-      return reply.code(500).send({ code: 'ENGAGEMENT_FAILED', message: 'Could not load your weekly goals.' });
+      return reply.code(500).send({ code: 'ENGAGEMENT_FAILED', message: 'Could not load your reminder setting.' });
     }
   });
 
