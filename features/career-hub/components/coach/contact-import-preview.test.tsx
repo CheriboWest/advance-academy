@@ -15,11 +15,13 @@ const api = vi.hoisted(() => ({
   searchCompaniesForImport: vi.fn(),
   applyImportMapping: vi.fn(),
   uploadImportFile: vi.fn(),
+  listImports: vi.fn(),
 }));
 vi.mock("@/features/career-hub/lib/contact-import-api", () => api);
 
 import { ContactImportPreview } from "@/features/career-hub/components/coach/contact-import-preview";
 import { MappingStep } from "@/features/career-hub/components/coach/contact-import-wizard";
+import { ContactImportBatchView } from "@/features/career-hub/components/coach/contact-import-history";
 
 const reviewRow: ImportRow = {
   id: 11,
@@ -119,16 +121,36 @@ describe("ContactImportPreview", () => {
     expect((screen.getByRole("button", { name: /Import 2 rows/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("only offers contacts at the row's company, and names the one elsewhere", async () => {
+    api.listImportRows.mockResolvedValue({
+      rows: [{
+        ...reviewRow, company_status: "matched", company_match: { id: "e1", method: "name" }, company_candidates: [],
+        extracted: { ...reviewRow.extracted, contact: { full_name: "Pat Kim", job_title: null, email: "pat@beta.com", phone: null, linkedin_url: null, notes: null } },
+        contact_status: "needs_review",
+        contact_candidates: [{ id: "k3", full_name: "Pat Kim", company_id: "e2", company_name: "Beta Talent", email: "pat@beta.com", phone: null, linkedin_url: null, job_title: null }],
+      }],
+      total: 1, limit: 100, offset: 0,
+    });
+    render(<ContactImportPreview batchId="b1" editable />);
+    const select = (await screen.findByLabelText("Contact")) as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(["", "create", "skip"]);
+    expect(screen.getByText(/Already in the CRM at another company: Pat Kim, Beta Talent/)).toBeTruthy();
+  });
+
   it("read-only mode filters by result and shows kept conflicts and errors", async () => {
     api.listImportRows.mockResolvedValue({
       rows: [{
         ...reviewRow, classification: "matched", company_status: "matched", result_status: "matched",
-        result: { conflicts: [{ record: "contact", field: "phone", existing: "020 1", incoming: "020 2" }] },
+        result: { conflicts: [
+          { record: "contact", field: "phone", existing: "020 1", incoming: "020 2" },
+          { record: "contact", field: "email", existing: null, incoming: "nina@x.example", reason: "used_by_other_contact" },
+        ] },
       }],
       total: 1, limit: 100, offset: 0,
     });
     render(<ContactImportPreview batchId="b1" editable={false} />);
     expect(await screen.findByText(/Kept existing contact phone "020 1" \(file had "020 2"\)/)).toBeTruthy();
+    expect(screen.getByText('Did not add contact email "nina@x.example": another contact already has it')).toBeTruthy();
     expect(screen.queryByLabelText("Company")).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: /Failed/ }));
     await waitFor(() => expect(api.listImportRows).toHaveBeenLastCalledWith("b1", { resultStatus: "failed", limit: 100, offset: 0 }));
@@ -162,5 +184,20 @@ describe("MappingStep", () => {
     expect(api.applyImportMapping).toHaveBeenCalledWith("b1", {
       "JOB AGENCIES UK": { include: true, group_fill: false, company_link_is_website: true, columns: { A: "company_name", B: "ignore", C: "contact" } },
     });
+  });
+});
+
+describe("ContactImportBatchView", () => {
+  it("an upload that did not finish is shown as such, never resumed into mapping or import", async () => {
+    api.getImport.mockResolvedValue({
+      batch: { id: "b9", file_name: "half.xlsx", status: "uploading", mine: true, created_at: "2026-10-14T10:00:00Z",
+               committed_at: null, error: null, summary: null, sheets: [], mapping: null },
+      counts,
+    });
+    render(<ContactImportBatchView batchId="b9" />);
+    expect(await screen.findByText(/This upload did not finish/)).toBeTruthy();
+    expect(screen.getByText(/Upload incomplete/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Preview the import/ })).toBeNull();
+    expect(api.listImportRows).not.toHaveBeenCalled();
   });
 });

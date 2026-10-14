@@ -19,7 +19,7 @@ import { ContactImportPreview } from "@/features/career-hub/components/coach/con
 type Step = "upload" | "map" | "preview" | "done";
 
 function stepFor(batch: ImportBatch | null): Step {
-  if (!batch) return "upload";
+  if (!batch || batch.status === "uploading") return "upload";   // an unfinished upload starts over
   if (batch.status === "committed") return "done";
   return batch.status === "uploaded" ? "map" : "preview";
 }

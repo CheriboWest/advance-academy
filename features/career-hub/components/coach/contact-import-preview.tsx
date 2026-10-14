@@ -25,10 +25,12 @@ import {
   RESULT_LABELS,
   companyLabel,
   companyOptions,
+  conflictText,
   contactLabel,
   contactOptions,
   needsCompanyDecision,
   needsContactDecision,
+  otherCompanyContacts,
   toResolutionPayload,
 } from "@/features/career-hub/lib/contact-import";
 import { Badge } from "@/components/ui/badge";
@@ -204,6 +206,12 @@ export function RowDecision({
               </option>
             ))}
           </select>
+          {otherCompanyContacts(row).map((c) => (
+            <p key={c.id} className="mt-1 text-xs text-muted-foreground">
+              Already in the CRM at another company: {c.full_name}, {c.company_name}
+              {c.email ? ` (${c.email})` : ""}. It can&apos;t be matched from this row.
+            </p>
+          ))}
         </div>
       ) : null}
     </div>
@@ -258,7 +266,7 @@ function RowDetails({ row, showResult }: { row: ImportRow; showResult: boolean }
         <ul className="text-xs text-sky-900">
           {conflicts.map((c) => (
             <li key={`${c.record}-${c.field}`}>
-              Kept existing {c.record} {c.field} &quot;{c.existing}&quot; (file had &quot;{c.incoming}&quot;)
+              {conflictText(c)}
             </li>
           ))}
         </ul>

@@ -2,6 +2,7 @@ import type {
   Classification,
   CompanyDecision,
   ContactDecision,
+  ImportConflict,
   ImportRole,
   ImportRow,
   ImportSummary,
@@ -106,12 +107,15 @@ export function companyOptions(row: ImportRow): DecisionOption<CompanyDecision>[
 }
 
 /** What an admin can do with a row's contact. A contact the file couldn't
- *  read (contact_error) can only be skipped, which lets the company import. */
+ *  read (contact_error) can only be skipped, which lets the company import.
+ *  Only contacts at the row's own (settled) company can be matched — the
+ *  database refuses any other match and would mark the row invalid. */
 export function contactOptions(row: ImportRow): DecisionOption<ContactDecision>[] {
   if (row.extracted?.contact_error || !row.extracted?.contact) {
     return [{ key: "skip", label: "Leave the contact out", decision: { action: "skip" } }];
   }
-  const options: DecisionOption<ContactDecision>[] = row.contact_candidates.map((c) => ({
+  const matchable = row.contact_candidates.filter((c) => contactMatchAllowed(row, c.id));
+  const options: DecisionOption<ContactDecision>[] = matchable.map((c) => ({
     key: `match:${c.id}`,
     label: `Same person as ${c.full_name} at ${c.company_name}${c.email ? ` (${c.email})` : ""}`,
     decision: { action: "match", contact_id: c.id },
@@ -150,6 +154,19 @@ export function contactLabel(row: ImportRow): string {
   const contact = row.extracted?.contact;
   if (!contact) return row.extracted?.contact_error ? "unreadable contact" : "—";
   return [contact.full_name, contact.job_title].filter(Boolean).join(" · ");
+}
+
+/** One line for a value the import kept as it was. */
+export function conflictText(c: ImportConflict): string {
+  if (c.reason === "used_by_other_contact") {
+    return `Did not add ${c.record} ${c.field} "${c.incoming}": another contact already has it`;
+  }
+  return `Kept existing ${c.record} ${c.field} "${c.existing ?? ""}" (file had "${c.incoming}")`;
+}
+
+/** Contact candidates the row can't be matched to, shown so the admin knows why "create" was refused. */
+export function otherCompanyContacts(row: ImportRow) {
+  return row.contact_candidates.filter((c) => !contactMatchAllowed(row, c.id));
 }
 
 export function summaryLines(summary: ImportSummary | null): Array<{ label: string; value: number }> {

@@ -15,11 +15,19 @@ The import runs in four steps.
    - 10 MB per file;
    - 150 MB uncompressed for an .xlsx;
    - 20 sheets;
-   - 20,000 rows per sheet.
+   - 20,000 rows with data per sheet (cells that are only formatted don't
+     count);
+   - 50 columns. Data beyond column AX is refused with the column named,
+     never silently dropped.
 
    Every non-blank row is stored with its raw cells (value, original type,
    display text and hyperlink) under its sheet row number. Uploading the same
    bytes again is flagged, using the SHA-256 of the file.
+
+   The batch is `uploading` until its last row is stored. If storing fails in
+   any way, the batch is deleted; if even that fails, it stays `uploading`
+   ("Upload incomplete" in the history) and the mapping, preview and import
+   all refuse it.
 2. **Map.** A role is suggested for each column from its header and sample
    values. The admin can change any of them. The roles are:
 
@@ -63,7 +71,8 @@ Extraction runs in `backend-python/app/contacts_import/mapping.py`, reusing
 - **Nothing is guessed.**
   - After a completely blank row, a row with no company is **invalid**.
   - A company cell holding only a URL gives a website, never a name. Such a row
-    can match an existing company by domain, but cannot create one.
+    never matches or creates a company on its own: if the domain belongs to an
+    existing company, an admin confirms the match.
 - **Links must be valid.**
   - LinkedIn display text such as "Jane Doe | LinkedIn" is a name.
   - Text is a URL only if it is a valid http(s) URL.
@@ -86,21 +95,31 @@ Extraction runs in `backend-python/app/contacts_import/mapping.py`, reusing
 Matching runs in SQL, in `contact_import_classify`, through the `ci_norm_*`
 normalizers. The preview and the commit therefore use the same rules.
 
-**Companies.** These keys must agree on **one** company:
+**Companies.** A row matches an existing company only by its **name**:
 
-- website domain, excluding job boards, social sites and webmail
-  (`ci_generic_domain`);
 - exact normalized name (case, punctuation, whitespace and `&`/`and`; legal
-  suffixes are kept);
-- verified alias.
+  suffixes are kept), or
+- a verified alias.
+
+The website domain can confirm a name match, never replace it. Domains on
+shared hosts (job boards and applicant-tracking systems, social and review
+sites, maps, link shorteners, webmail, site builders and hosting such as
+`wixsite.com` or `github.io`; see `ci_generic_domain`) are ignored entirely.
 
 These cases go to **needs review**:
 
-- the keys point at different companies, or more than one company;
+- the website domain belongs to an existing company but the name doesn't
+  match it ("Delta People" on Charlie Staffing's domain), or the row has no
+  name at all. The admin can match it (saving the name as an alias), create a
+  separate company, or skip;
+- the name and the domain point at different companies, or more than one
+  company;
 - only the looser slug matches, for example "Gamma UK" against "Gamma Group".
   Such a company can't be created anyway, because the slug is unique.
 
-Rows in the same file that name the same new company create it once.
+Inside one file, rows are grouped into one new company by **exact name
+only**. A second name on the same website as a new company goes to review
+("create separately" or skip); it is never folded into the first.
 
 **Contacts.** Matching is tried in this order:
 
@@ -112,12 +131,19 @@ Rows in the same file that name the same new company create it once.
 
 These cases go to **needs review**:
 
-- an email or profile that belongs to a contact at another company;
+- an email or profile that belongs to a contact at another company (it can't
+  be matched from this row, only left out);
 - several contacts sharing that email or profile;
 - the same name at the company without a confirming phone number.
 
+A **create** decision overrides an uncertain name match, never an exact
+duplicate: if any contact already has the row's email or LinkedIn profile,
+the row needs review again. This is re-checked inside the commit, so a
+contact another admin's import created after this preview counts too.
+
 Repeats inside the file (same email, profile, or company + name + phone)
-resolve to one contact.
+resolve to one contact, including a row whose email an earlier row is
+filling in on an existing contact.
 
 **Filling fields.** A matched company or contact only has *empty* fields filled:
 
@@ -125,8 +151,9 @@ resolve to one contact.
   from real source notes;
 - companies: `website` and `canonical_domain`.
 
-A differing value is reported as a **conflict** and left as it was. Names are
-never changed.
+A differing value is reported as a **conflict** and left as it was. An empty
+email or LinkedIn profile is not filled when another contact already has that
+value; that is reported as a conflict too. Names are never changed.
 
 ## Safety
 
@@ -140,6 +167,8 @@ never changed.
   - the batch gets `failed`.
 
   It can be committed again after the admin fixes or skips those rows.
+  Applying a new column mapping clears the failure from the batch and its
+  rows.
 - **Repeat imports.** Importing the same file again creates nothing.
 - **Admins only.** The API depends on `get_current_user`, which is
   backend-python's admin gate (`users.is_admin` or `ADMIN_USER_IDS`), and
@@ -147,9 +176,11 @@ never changed.
   - History is shared by all admins.
   - Changing or committing a batch is limited to its uploader. This is checked
     in the router and again in `contact_import_commit`.
-- **Database privileges.** The new tables and the classify and commit
-  functions are service_role only (RLS on; revoked from anon and
-  authenticated).
+- **Database privileges.** The new tables, the row id sequence and the
+  classify and commit functions are service_role only (RLS on; revoked from
+  anon and authenticated).
+- **Logs.** Failed Supabase writes log the status, error code and message
+  only, never the rows or the error's details (which quote values).
 - **Company deletion keeps working.** `company_aliases` is on
   `delete_companies_permanently`'s allowlist (on delete cascade). The staging
   tables hold company and contact ids without foreign keys, so permanent
@@ -185,19 +216,23 @@ Run `PGHOST=127.0.0.1 PGPORT=<port> supabase/tests/run_local.sh`. Its 048 parts
 are:
 
 - `048_contact_import.test.sql`: classification, decisions, commit, fill-only
-  merging, conflicts, aliases, re-import, rollback, partial rows, privileges
+  merging, conflicts, aliases, re-import, rollback, partial rows, domain-only
+  matches in one file and across batches, shared hosts, "create" against
+  existing duplicates, duplicate-free filling, unfinished uploads, privileges
   and the delete guard.
 - `048_contact_import_concurrency.test.sh`: two simultaneous commits of
-  overlapping files.
+  overlapping files, and of two "create" decisions for the same contact.
 
 The `backend-python` self-checks run with
 `for f in test_*.py; do .venv/bin/python $f; done`:
 
 - `test_contact_import_wizard.py`: parsing, raw preservation, suggested
-  mapping, blank-row grouping, LinkedIn and URL rules, source info, CSV, limits.
+  mapping, blank-row grouping, LinkedIn and URL rules, source info, CSV,
+  limits (formatted rows, the column limit).
 - `test_contact_imports_routes.py`: the real auth gate (401, 403 for
-  non-admins, 403 for another admin's batch), upload validation, decisions,
-  and commit error mapping.
+  non-admins, 403 for another admin's batch), upload validation, failed and
+  unfinished uploads, decisions, re-mapping after a failure, commit error
+  mapping, and that failed writes don't log contact data.
 - `test_contact_import_e2e.py`: the whole flow through PostgREST against a
   scratch database, including a re-import. It is skipped unless
   `CONTACT_IMPORT_E2E_SUPABASE_URL` and `CONTACT_IMPORT_E2E_SERVICE_KEY` are

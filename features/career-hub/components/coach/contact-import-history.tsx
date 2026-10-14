@@ -16,6 +16,7 @@ import { ContactImportPreview } from "@/features/career-hub/components/coach/con
 import { ContactImportWizard, ImportSummaryView } from "@/features/career-hub/components/coach/contact-import-wizard";
 
 const STATUS_LABEL: Record<ImportBatch["status"], string> = {
+  uploading: "Upload incomplete",
   uploaded: "Uploaded (not mapped)",
   previewed: "In review",
   committed: "Imported",
@@ -111,6 +112,16 @@ export function ContactImportBatchView({ batchId }: { batchId: string }) {
     </header>
   );
 
+  if (batch.status === "uploading") {
+    return (
+      <div className="space-y-4">
+        {header}
+        <p className="text-sm text-muted-foreground">
+          This upload did not finish, so it can&apos;t be mapped or imported. Upload the file again.
+        </p>
+      </div>
+    );
+  }
   if (batch.mine && batch.status !== "committed") {
     return (
       <div className="space-y-4">

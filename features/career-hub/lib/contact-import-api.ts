@@ -22,7 +22,7 @@ export type ImportRole =
 
 export type Classification = "matched" | "new" | "needs_review" | "invalid" | "skipped";
 export type ResultStatus = "created" | "updated" | "matched" | "skipped" | "failed" | "rolled_back";
-export type BatchStatus = "uploaded" | "previewed" | "committed" | "failed";
+export type BatchStatus = "uploading" | "uploaded" | "previewed" | "committed" | "failed";
 
 export interface RawCell {
   header: string;
@@ -168,10 +168,22 @@ export interface ImportRow {
     company?: string;
     contact_id?: string | null;
     contact?: string | null;
-    conflicts?: Array<{ record: string; field: string; existing: string; incoming: string }>;
+    conflicts?: ImportConflict[];
     reason?: string;
   } | null;
   error: string | null;
+}
+
+/** A value the import did not write. `existing` is what the record kept;
+ *  `used_by_other_contact` means the field was empty but another contact
+ *  already has that email/profile, so filling it would have duplicated it. */
+export interface ImportConflict {
+  record: string;
+  field: string;
+  existing: string | null;
+  incoming: string;
+  reason?: "used_by_other_contact";
+  other_contact_id?: string;
 }
 
 export interface CompanySearchResult {

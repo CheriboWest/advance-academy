@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { ImportRow } from "@/features/career-hub/lib/contact-import-api";
 import {
   companyOptions,
+  conflictText,
   contactMatchAllowed,
   contactOptions,
+  otherCompanyContacts,
   summaryLines,
   toResolutionPayload,
 } from "@/features/career-hub/lib/contact-import";
@@ -72,12 +74,22 @@ describe("companyOptions", () => {
 });
 
 describe("contactOptions", () => {
-  it("offers the existing contact, create, or leaving it out", () => {
-    expect(contactOptions(row()).map((o) => o.decision)).toEqual([
+  it("offers the existing contact at the row's company, create, or leaving it out", () => {
+    expect(contactOptions(row({ company_match: { id: "e2", method: "name" } })).map((o) => o.decision)).toEqual([
       { action: "match", contact_id: "k3" },
       { action: "create" },
       { action: "skip" },
     ]);
+  });
+
+  it("never offers a contact at another company (the database would mark the row invalid)", () => {
+    const elsewhere = row({ company_match: { id: "e1", method: "name" } });
+    expect(contactOptions(elsewhere).map((o) => o.key)).toEqual(["create", "skip"]);
+    expect(otherCompanyContacts(elsewhere).map((c) => c.id)).toEqual(["k3"]);
+  });
+
+  it("offers no match while the row's company is not settled", () => {
+    expect(contactOptions(row()).map((o) => o.key)).toEqual(["create", "skip"]);
   });
 
   it("an unreadable contact can only be left out (so the company can import)", () => {
@@ -89,6 +101,20 @@ describe("contactOptions", () => {
     expect(contactMatchAllowed(row({ company_match: { id: "e2", method: "name" } }), "k3")).toBe(true);
     expect(contactMatchAllowed(row({ company_match: { id: "e1", method: "name" } }), "k3")).toBe(false);
     expect(contactMatchAllowed(row(), "k3")).toBe(false);
+  });
+});
+
+describe("conflictText", () => {
+  it("a differing value was kept", () => {
+    expect(conflictText({ record: "contact", field: "phone", existing: "020 1", incoming: "020 2" })).toBe(
+      'Kept existing contact phone "020 1" (file had "020 2")'
+    );
+  });
+
+  it("an empty field was not filled because another contact has the value", () => {
+    expect(
+      conflictText({ record: "contact", field: "email", existing: null, incoming: "nina@x.example", reason: "used_by_other_contact" })
+    ).toBe('Did not add contact email "nina@x.example": another contact already has it');
   });
 });
 
