@@ -85,6 +85,8 @@ def _require_owner(batch: dict[str, Any], user_id: str) -> None:
 def _require_editable(batch: dict[str, Any]) -> None:
     if batch["status"] == "committed":
         raise HTTPException(status_code=409, detail="This import has already been committed.")
+    if batch["status"] == "uploading":
+        raise HTTPException(status_code=409, detail="This upload did not finish. Upload the file again.")
 
 
 def _db_error(exc: httpx.HTTPStatusError) -> Optional[dict[str, Any]]:
@@ -133,9 +135,15 @@ async def upload_import(
     async with httpx.AsyncClient() as client:
         previous = await rest.select(client, "contact_import_batches", {
             "file_sha256": f"eq.{sha}", "select": "id,file_name,status,created_at", "order": "created_at.desc"})
+        # 'uploading' until the last row is stored. If this request dies part-way
+        # (an error, a timeout, a cancelled request, a restart) the batch is
+        # deleted, or failing that stays marked unfinished: the mapping, the
+        # preview and the commit all refuse it, so a partial file can never
+        # pass for the whole one (its missing rows would read as blank rows
+        # and split company groups).
         created = await rest.insert(client, "contact_import_batches", [{
             "created_by": user_id, "file_name": safe_name, "file_kind": kind, "file_sha256": sha,
-            "file_size": len(data), "sheets": summaries,
+            "file_size": len(data), "sheets": summaries, "status": "uploading",
         }])
         batch = created[0]
         rows = [
@@ -145,10 +153,17 @@ async def upload_import(
         try:
             for i in range(0, len(rows), _CHUNK):
                 await rest.insert(client, "contact_import_rows", rows[i:i + _CHUNK], prefer="return=minimal", timeout=60.0)
-        except httpx.HTTPStatusError as exc:
+            await rest.update(client, "contact_import_batches", {"id": f"eq.{batch['id']}"}, {"status": "uploaded"})
+        except BaseException as exc:  # noqa: BLE001 — cancellation too: never leave a partial batch looking complete
             logger.exception("Storing rows for import %s failed", batch["id"])
-            await rest.delete(client, "contact_import_batches", {"id": f"eq.{batch['id']}"}, prefer="return=minimal")
-            raise HTTPException(status_code=502, detail="The file could not be stored.") from exc
+            try:
+                await rest.delete(client, "contact_import_batches", {"id": f"eq.{batch['id']}"}, prefer="return=minimal")
+            except BaseException:  # noqa: BLE001 — the batch stays 'uploading', which is refused everywhere
+                logger.error("Could not remove unfinished import %s; it stays marked as uploading", batch["id"])
+            if isinstance(exc, Exception):
+                raise HTTPException(status_code=502, detail="The file could not be stored.") from exc
+            raise
+        batch["status"] = "uploaded"
 
     return {"batch": batch, "previous_imports_of_this_file": previous}
 
@@ -311,7 +326,12 @@ async def apply_import_mapping(batch_id: str, body: MappingBody, user_id: str = 
             await rest.upsert(client, "contact_import_rows", updates[i:i + _CHUNK],
                               on_conflict="batch_id,sheet,row_number", prefer="resolution=merge-duplicates,return=minimal",
                               timeout=120.0)
-        await rest.update(client, "contact_import_batches", {"id": f"eq.{batch['id']}"}, {"mapping": mapping})
+        # The rows' earlier commit results were cleared above; a failed commit's
+        # summary and error describe rows that no longer mean the same thing.
+        reset: dict[str, Any] = {"mapping": mapping, "summary": None, "error": None}
+        if batch["status"] == "failed":
+            reset["status"] = "previewed"
+        await rest.update(client, "contact_import_batches", {"id": f"eq.{batch['id']}"}, reset)
         preview = await _classify(client, rest, batch["id"])
     return {"preview": preview}
 
@@ -403,6 +423,7 @@ async def commit_import(batch_id: str, user_id: str = Depends(get_current_user))
     async with httpx.AsyncClient() as client:
         batch = await _load_batch(client, rest, batch_id)
         _require_owner(batch, user_id)
+        _require_editable(batch)
         try:
             summary = await rest.rpc(client, "contact_import_commit",
                                      {"p_batch": batch["id"], "p_actor": user_id}, timeout=_RPC_TIMEOUT)

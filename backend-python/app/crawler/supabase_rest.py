@@ -16,6 +16,22 @@ from typing import Any, Optional
 import httpx
 
 
+def _error_summary(response: httpx.Response) -> str:
+    """Status plus PostgREST's error code and message, for the logs.
+
+    Never the request payload or the error's `details`/`hint`: those carry
+    row values (a unique violation's details quote the duplicate key), and
+    the rows written through here include people's names, emails and phones.
+    """
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict):
+        return f"HTTP {response.status_code} {body.get('code') or ''} {body.get('message') or ''}".strip()
+    return f"HTTP {response.status_code}"
+
+
 class SupabaseRest:
     def __init__(self, base_url: str, service_role_key: str, timeout: float = 15.0):
         self._rest = f"{base_url.rstrip('/')}/rest/v1"
@@ -90,11 +106,7 @@ class SupabaseRest:
             timeout=timeout or self._timeout,
         )
         if response.status_code >= 400:
-            print(" === SUPABASE RPC ERROR ===", flush=True)
-            print("FUNCTION:", function, flush=True)
-            print("STATUS:", response.status_code, flush=True)
-            print("RESPONSE:", response.text, flush=True)
-            print("========================== ", flush=True)
+            print(f"SUPABASE RPC ERROR {function}: {_error_summary(response)}", flush=True)
         response.raise_for_status()
         if not response.content:
             return None
@@ -117,12 +129,7 @@ class SupabaseRest:
             timeout=timeout or self._timeout,
         )
         if response.status_code >= 400:
-            print(" === SUPABASE INSERT ERROR ===")
-            print("TABLE:", table)
-            print("STATUS:", response.status_code)
-            print("PAYLOAD:", rows)
-            print("RESPONSE:", response.text)
-            print("============================ ")
+            print(f"SUPABASE INSERT ERROR {table} ({len(rows)} rows): {_error_summary(response)}", flush=True)
         response.raise_for_status()
         if prefer.startswith("return=representation"):
             return response.json()

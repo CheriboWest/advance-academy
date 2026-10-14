@@ -119,9 +119,27 @@ def _find_header(grid: list[list[tuple[Any, Optional[str]]]]) -> int:
     raise UploadError("No header row found in the first rows of the sheet.")
 
 
+def _has_content(value: Any, hyperlink: Optional[str]) -> bool:
+    return bool(hyperlink) or (value is not None and not (isinstance(value, str) and not value.strip()))
+
+
+def _too_wide(name: str, row_number: int, column: int) -> UploadError:
+    return UploadError(
+        f"Sheet {name!r} has data in column {get_column_letter(column)} (row {row_number}); only the first "
+        f"{MAX_COLUMNS} columns (A–{get_column_letter(MAX_COLUMNS)}) can be imported. Remove or move the extra columns."
+    )
+
+
 def _sheet_from_grid(name: str, index: int, grid: list[list[tuple[Any, Optional[str]]]]) -> ParsedSheet:
     if not grid:
         return ParsedSheet(name=name, index=index, header_row=1, headers={})
+    # Columns past the limit are refused, not dropped: a dropped column loses
+    # data silently, and a row whose only data was there would read as blank
+    # and end a company group.
+    for i, row in enumerate(grid):
+        for c in range(MAX_COLUMNS, len(row)):
+            if _has_content(*row[c]):
+                raise _too_wide(name, i + 1, c + 1)
     h = _find_header(grid)
     width = min(max(len(r) for r in grid), MAX_COLUMNS)
     headers: dict[str, str] = {}
@@ -143,7 +161,7 @@ def _sheet_from_grid(name: str, index: int, grid: list[list[tuple[Any, Optional[
     # Trailing blank rows carry nothing (not even a group boundary worth keeping).
     while rows and rows[-1].is_blank:
         rows.pop()
-    if len(rows) > MAX_ROWS_PER_SHEET:
+    if sum(1 for r in rows if not r.is_blank) > MAX_ROWS_PER_SHEET:
         raise UploadError(f"Sheet {name!r} has more than {MAX_ROWS_PER_SHEET} rows. Split the file and import it in parts.")
     return ParsedSheet(name=name, index=index, header_row=h + 1, headers=headers, rows=rows)
 
@@ -169,14 +187,36 @@ def parse_xlsx(data: bytes) -> list[ParsedSheet]:
 
     sheets: list[ParsedSheet] = []
     for index, ws in enumerate(wb.worksheets):
-        if ws.max_row > MAX_ROWS_PER_SHEET + HEADER_SEARCH_ROWS + 1000:
-            raise UploadError(f"Sheet {ws.title!r} has more than {MAX_ROWS_PER_SHEET} rows. Split the file and import it in parts.")
-        grid = [
-            [(cell.value, cell.hyperlink.target if cell.hyperlink else None) for cell in row[:MAX_COLUMNS]]
-            for row in ws.iter_rows()
-        ]
-        sheets.append(_sheet_from_grid(ws.title, index, grid))
+        sheets.append(_sheet_from_grid(ws.title, index, _xlsx_grid(ws)))
     return sheets
+
+
+def _xlsx_grid(ws: Any) -> list[list[tuple[Any, Optional[str]]]]:
+    """The sheet's cells up to its last row with content.
+
+    ws.max_row counts cells that are merely formatted (a border or fill
+    dragged down to row 30,000), so it says nothing about how much data a
+    sheet holds. Rows are counted by content instead, and empty rows are
+    only kept when content follows them.
+    """
+    grid: list[list[tuple[Any, Optional[str]]]] = []
+    pending_blank = 0
+    data_rows = 0
+    for row_number, row in enumerate(ws.iter_rows(), start=1):
+        cells = [(cell.value, cell.hyperlink.target if cell.hyperlink else None) for cell in row]
+        content = [c for c, (v, link) in enumerate(cells) if _has_content(v, link)]
+        if not content:
+            pending_blank += 1
+            continue
+        if content[-1] >= MAX_COLUMNS:
+            raise _too_wide(ws.title, row_number, content[-1] + 1)
+        data_rows += 1
+        if data_rows > MAX_ROWS_PER_SHEET + HEADER_SEARCH_ROWS:
+            raise UploadError(f"Sheet {ws.title!r} has more than {MAX_ROWS_PER_SHEET} rows. Split the file and import it in parts.")
+        grid.extend([] for _ in range(pending_blank))
+        pending_blank = 0
+        grid.append(cells[:MAX_COLUMNS])
+    return grid
 
 
 def _decode(data: bytes) -> str:
@@ -196,7 +236,7 @@ def parse_csv(data: bytes, sheet_name: str = "CSV") -> list[ParsedSheet]:
         dialect = csv.excel
     reader = csv.reader(io.StringIO(text), dialect)
     grid = [[(value if value != "" else None, None) for value in row] for row in reader]
-    if len(grid) > MAX_ROWS_PER_SHEET + HEADER_SEARCH_ROWS:
+    if sum(1 for row in grid if any(_has_content(v, link) for v, link in row)) > MAX_ROWS_PER_SHEET + HEADER_SEARCH_ROWS:
         raise UploadError(f"The CSV has more than {MAX_ROWS_PER_SHEET} rows. Split the file and import it in parts.")
     return [_sheet_from_grid(sheet_name, 0, grid)]
 

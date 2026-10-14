@@ -93,6 +93,8 @@ def run_import(data: bytes) -> tuple[str, dict]:
     up = client.post("/contacts/imports", params={"filename": f"e2e-{TAG}.xlsx"}, content=data)
     assert up.status_code == 201, up.text
     batch = up.json()["batch"]
+    stored = db("GET", f"contact_import_batches?id=eq.{batch['id']}&select=status")
+    check("the upload finished: the database has the batch as 'uploaded', not 'uploading'", stored == [{"status": "uploaded"}], stored)
     mapping = {"sheets": {s["name"]: s["suggested_mapping"] for s in batch["sheets"]}}
     preview = client.post(f"/contacts/imports/{batch['id']}/mapping", json=mapping)
     assert preview.status_code == 200, preview.text

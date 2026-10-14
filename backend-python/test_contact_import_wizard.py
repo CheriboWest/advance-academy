@@ -202,6 +202,69 @@ for label, name, data, needle in [
     except UploadError as exc:
         check(f"upload refuses: {label}", needle in str(exc), str(exc))
 
+# ── Formatting is not data; data is never dropped ────────────────────────────
+from openpyxl.styles import PatternFill  # noqa: E402
+
+from app.contacts_import import upload as upload_module  # noqa: E402
+
+
+def small_book(fill=None) -> bytes:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "S"
+    ws.append(["Company", "Email"])
+    ws.append(["Acme", "a@acme.example"])
+    ws.append(["Beta", "b@beta.example"])
+    if fill:
+        fill(ws)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def refused(data: bytes, name: str = "f.xlsx") -> str:
+    try:
+        parse_upload(name, data)
+    except UploadError as exc:
+        return str(exc)
+    return ""
+
+
+def formatted_far_down(ws) -> None:
+    ws["A30000"].fill = PatternFill("solid", fgColor="FFFF00")   # a fill dragged down, no value
+
+
+_, fsheets = parse_upload("f.xlsx", small_book(formatted_far_down))
+check("a formatted but empty cell at row 30,000 is not refused as 30,000 rows",
+      [r.row_number for r in fsheets[0].rows] == [2, 3] and fsheets[0].summary()["blank_rows"] == 0,
+      [r.row_number for r in fsheets[0].rows][-3:])
+_, gsheets = parse_upload("f.xlsx", small_book(lambda ws: ws.__setitem__("A25000", "Gamma")))
+check("real data far down keeps its row number, the gap kept as the blank rows it is",
+      [r.row_number for r in gsheets[0].rows if not r.is_blank] == [2, 3, 25000])
+saved_limit = upload_module.MAX_ROWS_PER_SHEET
+upload_module.MAX_ROWS_PER_SHEET = 1
+try:
+    check("more data rows than the limit is still refused (formatted rows don't count, data rows do)",
+          "more than 1 rows" in refused(small_book(formatted_far_down)), refused(small_book(formatted_far_down)))
+finally:
+    upload_module.MAX_ROWS_PER_SHEET = saved_limit
+
+too_wide = refused(small_book(lambda ws: ws.__setitem__("AY3", "extra notes")))
+check("data past column 50 is refused with the column named, not silently dropped",
+      "column AY (row 3)" in too_wide and "first 50 columns" in too_wide, too_wide)
+check("…a link alone past column 50 counts as data too",
+      "column BA" in refused(small_book(lambda ws: setattr(ws["BA2"], "hyperlink", "https://www.linkedin.com/in/x"))))
+_, wsheets = parse_upload("f.xlsx", small_book(lambda ws: setattr(ws["AY3"], "fill", PatternFill("solid", fgColor="FFFF00"))))
+check("…but a merely formatted cell past column 50 is fine", len(wsheets[0].rows) == 2)
+wide_csv = ("Company,Email" + "," * 49 + "\nAcme,a@acme.example" + "," * 48 + ",overflow\n").encode()
+check("csv: a value past column 50 is refused", "column AY (row 2)" in refused(wide_csv, "w.csv"), refused(wide_csv, "w.csv"))
+blank_tail_csv = ("Company,Email\nAcme,a@acme.example\n" + ",\n" * 30).encode()
+upload_module.MAX_ROWS_PER_SHEET = 1
+try:
+    check("csv: rows of empty separators don't count against the row limit", refused(blank_tail_csv, "t.csv") == "")
+finally:
+    upload_module.MAX_ROWS_PER_SHEET = saved_limit
+
 sheet_meta = [agency.summary(), uk.summary()]
 check("mapping validation: accepts the suggestion",
       validate_mapping({"JOB AGENCIES UK": am, "UK COMPANIES": um}, sheet_meta, ROLES) is None)

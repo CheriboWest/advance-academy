@@ -105,6 +105,9 @@ class FakeRest:
         self.tables: dict[str, list[dict]] = {"contact_import_batches": [], "contact_import_rows": [], "companies": []}
         self.rpcs: list[tuple[str, dict]] = []
         self.rpc_error: dict | None = None
+        self.fail_row_insert: BaseException | None = None   # raised by the next contact_import_rows insert
+        self.fail_delete = False
+        self.batch_inserts: list[dict] = []
         self._row_id = 0
 
     async def select(self, client, table, params=None, timeout=None):
@@ -117,6 +120,11 @@ class FakeRest:
         return len([r for r in self.tables.get(table, []) if _match(r, params or {})])
 
     async def insert(self, client, table, rows, prefer="return=representation", timeout=None):
+        if table == "contact_import_rows" and self.fail_row_insert is not None:
+            exc, self.fail_row_insert = self.fail_row_insert, None
+            raise exc
+        if table == "contact_import_batches":
+            self.batch_inserts.extend(dict(r) for r in rows)
         out = []
         for row in rows:
             row = dict(row)
@@ -148,6 +156,11 @@ class FakeRest:
         return [dict(r) for r in hit] if prefer.startswith("return=representation") else []
 
     async def delete(self, client, table, match, prefer="return=representation", timeout=None):
+        if self.fail_delete:
+            raise httpx.ConnectError("database unreachable")
+        if table == "contact_import_batches":   # on delete cascade
+            ids = {r["id"] for r in self.tables[table] if _match(r, match)}
+            self.tables["contact_import_rows"] = [r for r in self.tables["contact_import_rows"] if r["batch_id"] not in ids]
         keep = [r for r in self.tables[table] if not _match(r, match)]
         gone = [r for r in self.tables[table] if _match(r, match)]
         self.tables[table] = keep
@@ -240,6 +253,9 @@ check("only non-blank rows are stored, raw cells intact",
 check("the sheet summary carries headers and a suggested mapping",
       batch["sheets"][0]["suggested_mapping"]["columns"]["C"] == "contact" and batch["sheets"][0]["suggested_mapping"]["group_fill"])
 check("first upload of this file: no previous imports", resp.json()["previous_imports_of_this_file"] == [])
+check("the batch is written as 'uploading' and only marked 'uploaded' once every row is stored",
+      fake.batch_inserts[-1]["status"] == "uploading" and batch["status"] == "uploaded"
+      and fake.tables["contact_import_batches"][-1]["status"] == "uploaded")
 again = upload(ADMIN_A).json()
 check("uploading the same file again reports the earlier import",
       [p["id"] for p in again["previous_imports_of_this_file"]] == [bid])
@@ -249,6 +265,33 @@ check("unreadable workbook → 422", upload(ADMIN_A, b"PK nope", "c.xlsx").statu
 big = client.post("/contacts/imports", params={"filename": "big.csv"}, content=b"x" * (10 * 1024 * 1024 + 1), headers=ADMIN_A)
 check("over 10 MB → 413", big.status_code == 413, big.status_code)
 check("header-only file → 422", upload(ADMIN_A, b"Company,Email\n", "empty.csv").status_code == 422)
+
+# A failure part-way through storing rows — of any kind, not only an HTTP error.
+batches_before = len(fake.tables["contact_import_batches"])
+rows_before = len(fake.tables["contact_import_rows"])
+for label, exc in [("a timeout", httpx.ReadTimeout("timed out")), ("an HTTP error", httpx.HTTPStatusError(
+        "bad", request=httpx.Request("POST", SUPABASE_URL), response=httpx.Response(500))), ("a bug", RuntimeError("boom"))]:
+    fake.fail_row_insert = exc
+    resp = upload(ADMIN_A)
+    check(f"upload failing with {label} → 502, and the half-stored batch is removed", resp.status_code == 502
+          and len(fake.tables["contact_import_batches"]) == batches_before and len(fake.tables["contact_import_rows"]) == rows_before,
+          (resp.status_code, len(fake.tables["contact_import_batches"])))
+fake.fail_row_insert, fake.fail_delete = httpx.ReadTimeout("timed out"), True
+resp = upload(ADMIN_A)
+fake.fail_delete = False
+stuck = fake.tables["contact_import_batches"][-1]
+check("…and when even the cleanup fails, the batch stays marked 'uploading'",
+      resp.status_code == 502 and stuck["status"] == "uploading", (resp.status_code, stuck["status"]))
+for label, method, path, body in [
+    ("mapped", "post", f"/contacts/imports/{stuck['id']}/mapping", {"sheets": {"JOB AGENCIES UK": batch["sheets"][0]["suggested_mapping"]}}),
+    ("decided", "post", f"/contacts/imports/{stuck['id']}/resolutions", {"resolutions": [{"row_id": 1, "clear": True}]}),
+    ("committed", "post", f"/contacts/imports/{stuck['id']}/commit", None),
+]:
+    resp = call(method, path, body, ADMIN_A)
+    check(f"an unfinished upload can't be {label} → 409", resp.status_code == 409 and "did not finish" in resp.json()["detail"],
+          (resp.status_code, resp.text[:100]))
+check("…and nothing reached the database for it", not any(p.get("p_batch") == stuck["id"] for _, p in fake.rpcs))
+fake.tables["contact_import_batches"].remove(stuck)
 
 # ── 3. Cross-admin: history is shared, changes are the uploader's ────────────
 resp = client.get(f"/contacts/imports/{bid}", headers=ADMIN_B)
@@ -299,6 +342,14 @@ for code, status in [("CI409", 409), ("CI403", 403), ("CI404", 404), ("CI400", 4
     resp = client.post(f"/contacts/imports/{bid}/commit", headers=ADMIN_A)
     check(f"commit: database {code} → HTTP {status}", resp.status_code == status, resp.status_code)
 fake.rpc_error = None
+# A failed commit, then a new mapping: the old failure no longer describes these rows.
+the_batch = next(b for b in fake.tables["contact_import_batches"] if b["id"] == bid)
+the_batch.update(status="failed", summary={"status": "failed", "failed_rows": 1}, error="1 row(s) failed; nothing was imported.")
+stored[2].update(result_status="failed", error="23514: boom")
+resp = client.post(f"/contacts/imports/{bid}/mapping", json=mapping, headers=ADMIN_A)
+check("re-mapping after a failed commit clears the failure from the batch and its rows",
+      resp.status_code == 200 and the_batch["status"] == "previewed" and the_batch["summary"] is None and the_batch["error"] is None
+      and stored[2]["result_status"] is None and stored[2]["error"] is None, {k: the_batch[k] for k in ("status", "summary", "error")})
 resp = client.post(f"/contacts/imports/{bid}/commit", headers=ADMIN_A)
 check("commit passes the uploader as the actor", resp.status_code == 200
       and fake.rpcs[-1] == ("contact_import_commit", {"p_batch": bid, "p_actor": "admin-a"}))
@@ -316,6 +367,36 @@ resp = client.get("/contacts/imports/company-search", params={"q": "ac(me),*"}, 
 check("company search survives PostgREST metacharacters", resp.status_code == 200)
 resp = client.post("/contacts", json={}, headers=ADMIN_A)
 check("the contacts router still owns POST /contacts (422 from its own validation)", resp.status_code == 422, resp.status_code)
+
+# ── 8. Logs never carry the rows being written ───────────────────────────────
+import asyncio  # noqa: E402
+import contextlib  # noqa: E402
+
+from app.crawler.supabase_rest import SupabaseRest as RealRest  # noqa: E402
+
+
+def _postgrest_error(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(409, json={"code": "23505", "message": "duplicate key value violates unique constraint \"x\"",
+                                     "details": "Key (email)=(jane.private@example.com) already exists.", "hint": None})
+
+
+async def _failing_writes() -> None:
+    rest = RealRest(SUPABASE_URL, "k")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_postgrest_error)) as c:
+        for call_ in (lambda: rest.insert(c, "contacts", [{"full_name": "Jane Private", "email": "jane.private@example.com",
+                                                             "phone": "07700 900999"}]),
+                      lambda: rest.rpc(c, "contact_import_commit", {"p_batch": "b", "p_actor": "jane.private@example.com"})):
+            with contextlib.suppress(httpx.HTTPStatusError):
+                await call_()
+
+
+log = io.StringIO()
+with contextlib.redirect_stdout(log):
+    asyncio.run(_failing_writes())
+logged = log.getvalue()
+check("a failed insert/rpc logs the error code and message …", "23505" in logged and "duplicate key" in logged, logged)
+check("… but no names, emails or phones from the payload or the error details",
+      not any(v in logged for v in ("Jane Private", "jane.private@example.com", "07700 900999")), logged)
 
 print()
 if _failures:
