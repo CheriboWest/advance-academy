@@ -404,6 +404,36 @@ begin
 end $$;
 
 -- =============================================================================
+-- 5b. Partial rows, excluded sheets, warnings
+-- =============================================================================
+do $$
+declare b uuid := pg_temp.batch('A', 'partial.xlsx'); v jsonb; v_id bigint;
+begin
+  insert into batches values ('B5', b);
+  v_id := pg_temp.add(b, 1, pg_temp.co('Partial Agency', 'partial-agency'));
+  update public.contact_import_rows
+     set extracted = extracted || '{"contact_error": "Two people are listed in one cell.", "warnings": ["Phone kept as a note: ext 12"]}'
+   where id = v_id;
+  insert into public.contact_import_rows (batch_id, sheet, row_number, raw, extracted)
+  values (b, 'NOTES', 1, '{"A": {"value": "x"}}', '{"excluded": true}');
+  perform public.contact_import_classify(b);
+  perform pg_temp.check('H1 an unusable contact holds the row for review, with the reason and the warning shown',
+    (select classification = 'needs_review' and contact_status = 'needs_review'
+            and reasons[1] = 'Phone kept as a note: ext 12' and reasons[2] like 'Contact not imported: Two people%'
+       from public.contact_import_rows where id = v_id));
+  perform pg_temp.check('H2 an excluded sheet''s rows are skipped, not invalid',
+    (select classification = 'skipped' from public.contact_import_rows where batch_id = b and sheet = 'NOTES'));
+  update public.contact_import_rows set resolution = '{"contact": {"action": "skip"}}' where id = v_id;
+  perform public.contact_import_classify(b);
+  set local role service_role;
+  v := public.contact_import_commit(b, pg_temp.id('A'));
+  reset role;
+  perform pg_temp.check('H3 once the contact is skipped, the company alone imports',
+    v ->> 'status' = 'committed' and (v -> 'companies' ->> 'created')::int = 1
+    and (select result_status = 'created' and result ->> 'contact' is null from public.contact_import_rows where id = v_id));
+end $$;
+
+-- =============================================================================
 -- 6. Privileges and the company-delete guard
 -- =============================================================================
 do $$

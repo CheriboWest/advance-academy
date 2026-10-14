@@ -347,6 +347,8 @@ begin
 
     if r.extracted is null then
       v_cls := 'invalid'; v_reasons := array['The column mapping has not been applied to this row.'];
+    elsif coalesce((r.extracted ->> 'excluded')::boolean, false) then
+      v_cls := 'skipped'; v_reasons := array['This sheet is not included in the import.'];
     elsif cardinality(r.parse_errors) > 0 then
       v_cls := 'invalid'; v_reasons := r.parse_errors;
     else
@@ -432,8 +434,20 @@ begin
       end if;
 
       -- ── Contact ──────────────────────────────────────────────────────────
+      -- Extraction warnings (e.g. a value that was kept as a note) are shown, not acted on.
+      select v_reasons || coalesce(array_agg(w), '{}') into v_reasons
+        from jsonb_array_elements_text(coalesce(r.extracted -> 'warnings', '[]')) w;
       ct := r.extracted -> 'contact';
-      if ct is not null and jsonb_typeof(ct) = 'object' then
+      if nullif(r.extracted ->> 'contact_error', '') is not null then
+        -- Contact data the extractor could not use safely. The company part can still
+        -- import, but only once an admin has confirmed the contact is to be left out.
+        if v_cs in ('skipped', 'invalid') or r.resolution -> 'contact' ->> 'action' = 'skip' then
+          v_ks := 'skipped';
+        else
+          v_ks := 'needs_review';
+          v_reasons := array_append(v_reasons, 'Contact not imported: ' || (r.extracted ->> 'contact_error') || ' Skip the contact to import the company alone.');
+        end if;
+      elsif ct is not null and jsonb_typeof(ct) = 'object' then
         res_k := r.resolution -> 'contact';
         v_em := public.ci_norm_email(ct ->> 'email');
         v_li := public.ci_norm_linkedin(ct ->> 'linkedin_url');
