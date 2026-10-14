@@ -159,7 +159,7 @@ if CONTACTS_TS.exists():
           f"searched the function body for a fetchContacts(`?company_ids=${{...`) call")
 
     check("getContactDirectory() hits /contacts/directory, which the router exposes",
-          bool(re.search(r'fetchContacts<DirectoryContact>\(\s*"/directory"\s*\)', source))
+          bool(re.search(r'requestContacts<DirectoryContact>\(\s*"/directory"\s*\)', source))
           and any(getattr(r, "path", None) == "/contacts/directory" for r in contacts.router.routes))
     check("getContactsForCompanies() chunks rather than sending every id in "
           "one request (the actual fix for the batch-cap 422)",

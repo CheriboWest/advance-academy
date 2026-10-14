@@ -144,7 +144,7 @@ async def contact_directory(
             if len(page) < DIRECTORY_PAGE:
                 break
 
-    rows.sort(key=lambda r: ((r.get("company") or {}).get("name", "").lower(), r["full_name"].lower()))
+    rows.sort(key=lambda r: (((r.get("company") or {}).get("name") or "").lower(), r["full_name"].lower()))
     return [DirectoryContact(**row) for row in rows]
 
 

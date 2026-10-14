@@ -229,7 +229,8 @@ export interface Contact {
 
 /** One row of the coach Contact Directory — see DirectoryContact in schemas.py. */
 export interface DirectoryContact extends Contact {
-  company: { id: string; name: string; slug: string } | null;
+  /** `slug` is null for companies created before slugs existed — link by `id`. */
+  company: { id: string; name: string; slug: string | null } | null;
 }
 
 /** Body for creating/editing a contact — see ContactWrite in schemas.py. */

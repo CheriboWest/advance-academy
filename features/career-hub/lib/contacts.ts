@@ -13,19 +13,26 @@ import type { Contact, DirectoryContact } from "@/features/career-hub/lib/types"
  * lib/sponsorship.ts (server reads) and lib/sponsorship-api.ts (client
  * writes) are split.
  *
- * Never throws. A missing session, a network failure, or a non-2xx response
- * all resolve to an empty list — a page using this still renders, just
- * without contacts, rather than failing outright.
+ * Never throws. requestContacts says what went wrong; fetchContacts turns
+ * any failure into an empty list, so a page that only *decorates* itself with
+ * contacts (a count, a picker) still renders. A page whose whole content is
+ * contacts must not do that — an empty list there reads as "no contacts" — so
+ * the Contact Directory reports the failure instead (getContactDirectory).
  */
-async function fetchContacts<T = Contact>(pathAndQuery: string): Promise<T[]> {
+type ContactsRequest<T> =
+  | { ok: true; rows: T[] }
+  | { ok: false; reason: "unconfigured" | "no_session" | "network" }
+  | { ok: false; reason: "http"; status: number };
+
+async function requestContacts<T = Contact>(pathAndQuery: string): Promise<ContactsRequest<T>> {
   const baseUrl = careerHubApiUrl();
-  if (!baseUrl) return [];
+  if (!baseUrl) return { ok: false, reason: "unconfigured" };
 
   const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  if (!session) return [];
+  if (!session) return { ok: false, reason: "no_session" };
 
   try {
     const response = await fetch(
@@ -35,20 +42,50 @@ async function fetchContacts<T = Contact>(pathAndQuery: string): Promise<T[]> {
         cache: "no-store",
       }
     );
-    if (!response.ok) return [];
-    return (await response.json()) as T[];
+    if (!response.ok) return { ok: false, reason: "http", status: response.status };
+    return { ok: true, rows: (await response.json()) as T[] };
   } catch {
-    return [];
+    return { ok: false, reason: "network" };
   }
+}
+
+async function fetchContacts<T = Contact>(pathAndQuery: string): Promise<T[]> {
+  const result = await requestContacts<T>(pathAndQuery);
+  return result.ok ? result.rows : [];
 }
 
 export async function getContacts(companyId: string): Promise<Contact[]> {
   return fetchContacts(`?company_id=${encodeURIComponent(companyId)}`);
 }
 
-/** Every contact with its company — the coach Contact Directory. */
-export async function getContactDirectory(): Promise<DirectoryContact[]> {
-  return fetchContacts<DirectoryContact>("/directory");
+export type ContactDirectoryResult =
+  | { ok: true; contacts: DirectoryContact[] }
+  | { ok: false; error: string };
+
+/** Every contact with its company — the coach Contact Directory. Unlike the
+ *  readers above, a failure comes back as an error message for the page to
+ *  show: this list *is* the page, so an empty one would claim there are no
+ *  contacts. */
+export async function getContactDirectory(): Promise<ContactDirectoryResult> {
+  const result = await requestContacts<DirectoryContact>("/directory");
+  if (result.ok) return { ok: true, contacts: result.rows };
+  return { ok: false, error: directoryErrorMessage(result) };
+}
+
+function directoryErrorMessage(result: Exclude<ContactsRequest<unknown>, { ok: true }>): string {
+  switch (result.reason) {
+    case "unconfigured":
+      return "Contacts can't be loaded: the Career Hub API isn't configured for this site (BACKEND_PYTHON_URL is not set).";
+    case "no_session":
+      return "Your session has expired. Sign in again to see contacts.";
+    case "network":
+      return "Contacts couldn't be loaded: the Career Hub API didn't respond. Try again in a moment.";
+    case "http":
+      if (result.status === 401 || result.status === 403) {
+        return `You don't have access to the contact directory (HTTP ${result.status}). Sign in again with a coach account.`;
+      }
+      return `The contact directory couldn't be loaded (HTTP ${result.status}). Your contacts are not affected; try again, and if this keeps happening check the Career Hub API (backend-python) logs.`;
+  }
 }
 
 // Well under MAX_COMPANY_IDS_PER_LIST (500) in app/routers/contacts.py: the ids

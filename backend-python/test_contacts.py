@@ -362,6 +362,24 @@ check("directory sorts by company, then name",
 check("directory rows carry their company",
       bool(rows) and rows[0]["company"]["slug"] == "alpha")
 
+# A company with no slug (companies.slug is nullable; companies created before
+# migration 024 have none). One such contact used to fail response validation
+# and 500 the whole directory, which the page showed as "no contacts".
+_fixture["rest"] = FakeRest(contacts=[
+    {"id": "c1", "company_id": "x", "full_name": "Ann", "email": "a@x.com",
+     "company": {"id": "x", "name": "Acme", "slug": "acme"}},
+    {"id": "c2", "company_id": "y", "full_name": "Bob", "email": "b@y.com",
+     "company": {"id": "y", "name": "Hays", "slug": None}},
+])
+lenient_client = TestClient(app, raise_server_exceptions=False)   # see the 500, don't raise it
+response = lenient_client.get("/contacts/directory")
+rows = response.json() if response.status_code == 200 else []
+check("a contact at a company with no slug doesn't break the directory (was a 500)",
+      response.status_code == 200, f"got {response.status_code}")
+check("…every contact is listed, the slug-less company's contact included, with its company id and name",
+      [(r["full_name"], r["company"]["id"], r["company"]["name"], r["company"]["slug"]) for r in rows]
+      == [("Ann", "x", "Acme", "acme"), ("Bob", "y", "Hays", None)], f"{rows}")
+
 _anonymous()
 check("directory is coach-only",
       http_client.get("/contacts/directory").status_code == 401)

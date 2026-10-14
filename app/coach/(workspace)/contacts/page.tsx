@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Upload } from "lucide-react";
+import { TriangleAlert, Upload } from "lucide-react";
 
 import { getContactDirectory } from "@/features/career-hub/lib/contacts";
 import { ContactDirectory } from "@/features/career-hub/components/coach/contact-directory";
@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ContactsPage() {
-  const contacts = await getContactDirectory();
+  const directory = await getContactDirectory();
 
   return (
     <div className="space-y-4">
@@ -27,7 +27,17 @@ export default async function ContactsPage() {
           </Link>
         </Button>
       </header>
-      <ContactDirectory contacts={contacts} />
+      {directory.ok ? (
+        <ContactDirectory contacts={directory.contacts} />
+      ) : (
+        <p
+          role="alert"
+          className="flex items-start gap-2 rounded-lg border border-destructive/40 p-4 text-sm text-destructive"
+        >
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+          {directory.error}
+        </p>
+      )}
     </div>
   );
 }
