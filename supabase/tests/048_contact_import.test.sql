@@ -219,14 +219,17 @@ begin
     '1:matched:matched/matched 2:matched:matched/- 3:needs_review:needs_review/- 4:needs_review:needs_review/- '
     '5:matched:matched/matched 6:needs_review:matched/needs_review 7:needs_review:matched/needs_review '
     '8:new:new/new 9:matched:new_pending/duplicate_in_file 10:invalid:-/- 11:matched:matched/matched '
-    '12:matched:matched/- 13:matched:matched/matched 14:matched:matched/matched 15:matched:matched/- 16:needs_review:needs_review/-');
+    '12:matched:matched/- 13:matched:matched/matched 14:matched:matched/matched 15:needs_review:needs_review/- 16:needs_review:needs_review/-');
   perform pg_temp.expect('P2 exact normalized name matches (row 1)', null, format(
     $q$select (company_match ->> 'id') = %L and company_match ->> 'method' = 'name' from public.contact_import_rows where batch_id = %L and row_number = 1$q$,
     pg_temp.id('E1'), b), 'true');
-  perform pg_temp.expect('P2 domain + name agree → matched by domain (row 2)', null, format(
-    $q$select company_match ->> 'method' from public.contact_import_rows where batch_id = %L and row_number = 2$q$, b), 'domain');
-  perform pg_temp.expect('P2 a known domain under a different name is still one company (row 15)', null, format(
-    $q$select company_match ->> 'method' from public.contact_import_rows where batch_id = %L and row_number = 15$q$, b), 'domain');
+  perform pg_temp.expect('P2 name matches and the domain agrees → matched by name (row 2)', null, format(
+    $q$select company_match ->> 'method' from public.contact_import_rows where batch_id = %L and row_number = 2$q$, b), 'name');
+  perform pg_temp.check('P2 a known domain under a different name is NOT merged: review, the domain owner offered (row 15)',
+    (select company_match is null and jsonb_array_length(company_candidates) = 1
+            and company_candidates -> 0 ->> 'id' = pg_temp.id('E1')::text and company_candidates -> 0 -> 'reasons' = '["domain"]'
+            and reasons[1] like 'Same website domain as "Acme Recruitment Ltd", but a different name.%'
+       from public.contact_import_rows where batch_id = b and row_number = 15));
   perform pg_temp.expect('P3 two companies share the domain → review, both offered (row 3)', null, format(
     $q$select jsonb_array_length(company_candidates) from public.contact_import_rows where batch_id = %L and row_number = 3$q$, b), '2');
   perform pg_temp.expect('P3 slug-only resemblance is never merged (row 4)', null, format(
@@ -264,12 +267,15 @@ begin
   update public.contact_import_rows set resolution = '{"contact": {"action": "create"}}' where batch_id = b and row_number = 6;
   update public.contact_import_rows set resolution = '{"contact": {"action": "skip"}}' where batch_id = b and row_number = 7;
   update public.contact_import_rows set resolution = '{"company": {"action": "skip"}}' where batch_id = b and row_number = 16;
+  update public.contact_import_rows set resolution = jsonb_build_object('company',
+         jsonb_build_object('action', 'match', 'company_id', pg_temp.id('E1')))
+   where batch_id = b and row_number = 15;
 
   v := public.contact_import_classify(b);
   perform pg_temp.check('R1 every needs_review row is resolved', (v ->> 'needs_review')::int = 0);
   perform pg_temp.expect('R1 resolved rows', null, format(
     $q$select string_agg(row_number || ':' || classification, ' ' order by row_number) from public.contact_import_rows
-        where batch_id = %L and row_number in (3, 4, 6, 7, 16)$q$, b), '3:matched 4:skipped 6:new 7:matched 16:skipped');
+        where batch_id = %L and row_number in (3, 4, 6, 7, 15, 16)$q$, b), '3:matched 4:skipped 6:new 7:matched 15:matched 16:skipped');
 
   perform pg_temp.deny('C0 another admin cannot commit this batch', 'service_role',
     format('select public.contact_import_commit(%L, %L)', b, pg_temp.id('B')), '^CI403');
@@ -287,6 +293,9 @@ begin
   perform pg_temp.check('C1 one company created (Newco, once for two rows)',
     (select count(*) from public.companies) = v_before_companies + 1 and (v -> 'companies' ->> 'created')::int = 1
     and (select count(*) from public.companies where slug = 'newco-staffing') = 1);
+  perform pg_temp.check('C1 "companies matched" counts existing companies only (E1, D1, E2), not one this import created',
+    (v -> 'companies' ->> 'matched')::int = 3
+    and (select result ->> 'company' = 'in_file' from public.contact_import_rows where batch_id = b and row_number = 9));
   perform pg_temp.check('C1 two contacts created (Alex New once, Sam Lee by admin decision)',
     (select count(*) from public.contacts) = v_before_contacts + 2 and (v -> 'contacts' ->> 'created')::int = 2);
   perform pg_temp.expect('C2 row results', null, format(
@@ -311,7 +320,7 @@ begin
   perform pg_temp.check('C6 a matched company with no website gains one; one with a website keeps it',
     (select website = 'https://newco.example' and canonical_domain = 'newco.example' from public.companies where slug = 'newco-staffing')
     and (select website = 'https://acme-rec.co.uk' from public.companies where id = pg_temp.id('E1')));
-  perform pg_temp.check('C6 a differing company website is reported as a conflict (row 15 matched by domain, so none)',
+  perform pg_temp.check('C6 the same website is not a conflict (row 15, matched by an admin)',
     (select jsonb_array_length(result -> 'conflicts') = 0 from public.contact_import_rows where batch_id = b and row_number = 15));
   perform pg_temp.check('C7 raw source cells are kept',
     (select raw -> 'A' ->> 'value' = 'ACME  recruitment ltd.' from public.contact_import_rows where batch_id = b and row_number = 1));
@@ -340,7 +349,7 @@ begin
     and (select (contact_match ->> 'id')::uuid <> pg_temp.id('K2') from public.contact_import_rows where batch_id = b and row_number = 6));
   perform pg_temp.expect('D1 rows still needing a human stay that way', null, format(
     $q$select string_agg(row_number::text, ',' order by row_number) from public.contact_import_rows
-        where batch_id = %L and classification = 'needs_review'$q$, b), '3,4,7,16');
+        where batch_id = %L and classification = 'needs_review'$q$, b), '3,4,7,15,16');
   v_co := (select count(*) from public.companies); v_ct := (select count(*) from public.contacts);
   set local role service_role;
   v := public.contact_import_commit(b, pg_temp.id('A'));
@@ -434,6 +443,198 @@ begin
 end $$;
 
 -- =============================================================================
+-- 5c. A website domain never merges companies on its own
+-- =============================================================================
+do $$
+begin
+  perform pg_temp.check('I0 shared hosts are not company domains',
+    public.ci_generic_domain(public.ci_norm_domain('https://maps.app.goo.gl/AbC123'))
+    and public.ci_generic_domain(public.ci_norm_domain('https://uk.trustpilot.com/review/x.co.uk'))
+    and public.ci_generic_domain(public.ci_norm_domain('https://acme.wixsite.com/home'))
+    and public.ci_generic_domain(public.ci_norm_domain('https://sites.google.com/view/acme'))
+    and public.ci_generic_domain(public.ci_norm_domain('https://acme.github.io'))
+    and public.ci_generic_domain(public.ci_norm_domain('https://acme.myshopify.com'))
+    and not public.ci_generic_domain(public.ci_norm_domain('https://acme-rec.co.uk')));
+end $$;
+
+-- In ONE file: two different names on the same website.
+do $$
+declare b uuid := pg_temp.batch('A', 'same-domain-in-file.xlsx'); v jsonb;
+begin
+  perform pg_temp.add(b, 1, pg_temp.co('Alpha Agency', 'alpha-agency', 'https://shared-host.example/alpha'));
+  perform pg_temp.add(b, 2, pg_temp.co('Bravo Recruit', 'bravo-recruit', 'https://www.shared-host.example/bravo'));
+  perform pg_temp.add(b, 3, pg_temp.co(null, null, 'https://shared-host.example'));
+  perform pg_temp.add(b, 4, pg_temp.co('Alpha Agency', 'alpha-agency', 'https://maps.app.goo.gl/AbC'));
+  perform pg_temp.add(b, 5, pg_temp.co('Charlie Search', 'charlie-search', 'https://maps.app.goo.gl/AbC'));
+  perform public.contact_import_classify(b);
+  perform pg_temp.expect('I1 in-file: a second name on the same domain is NOT grouped under the first', null, format(
+    $q$select string_agg(row_number || ':' || classification || ':' || company_status, ' ' order by row_number)
+         from public.contact_import_rows where batch_id = %L$q$, b),
+    '1:new:new 2:needs_review:needs_review 3:needs_review:needs_review 4:matched:new_pending 5:new:new');
+  perform pg_temp.check('I1 …and says which row it collides with',
+    (select reasons[1] like 'Another row in this file (row id %) creates a company with the same website domain under a different name.%'
+       from public.contact_import_rows where batch_id = b and row_number = 2)
+    and (select reasons[1] like 'No company name in this row, and another row in this file%'
+       from public.contact_import_rows where batch_id = b and row_number = 3));
+
+  set local role service_role;
+  v := public.contact_import_commit(b, pg_temp.id('A'));
+  reset role;
+  perform pg_temp.check('I2 undecided, the second name is skipped, not merged into the first',
+    v ->> 'status' = 'committed' and (v -> 'companies' ->> 'created')::int = 2
+    and (select count(*) from public.companies where slug in ('alpha-agency', 'charlie-search')) = 2
+    and not exists (select 1 from public.companies where slug = 'bravo-recruit')
+    and (select result ->> 'reason' = 'needs_review (unresolved)' and result -> 'reasons' ->> 0 like 'Another row in this file%'
+           from public.contact_import_rows where batch_id = b and row_number = 2));
+  perform pg_temp.check('I2 a shared-host link is not stored as either company''s domain',
+    (select bool_and(canonical_domain is distinct from 'maps.app.goo.gl') from public.companies where slug in ('alpha-agency', 'charlie-search')));
+end $$;
+
+do $$
+declare b uuid := pg_temp.batch('A', 'same-domain-create.xlsx'); v jsonb;
+begin
+  perform pg_temp.add(b, 1, pg_temp.co('Echo Talent', 'echo-talent', 'https://echo-group.example'));
+  perform pg_temp.add(b, 2, pg_temp.co('Foxtrot Staffing', 'foxtrot-staffing', 'https://echo-group.example/foxtrot'));
+  perform public.contact_import_classify(b);
+  update public.contact_import_rows set resolution = '{"company": {"action": "create"}}' where batch_id = b and row_number = 2;
+  set local role service_role;
+  v := public.contact_import_commit(b, pg_temp.id('A'));
+  reset role;
+  perform pg_temp.check('I3 an admin''s "create separately" makes two companies',
+    (v -> 'companies' ->> 'created')::int = 2
+    and (select count(*) from public.companies where slug in ('echo-talent', 'foxtrot-staffing')) = 2);
+end $$;
+
+-- ACROSS batches: an existing company's domain under another name.
+do $$
+declare b uuid := pg_temp.batch('B', 'cross-batch-domain.xlsx'); v jsonb; v_co int;
+begin
+  insert into public.companies (name, slug, website) values ('Charlie Staffing', 'charlie-staffing', 'https://charlie-staffing.example');
+  perform pg_temp.add(b, 1, pg_temp.co('Delta People', 'delta-people', 'https://charlie-staffing.example/careers'),
+                      pg_temp.ct('Dee People', 'dee@delta-people.example'));
+  perform pg_temp.add(b, 2, pg_temp.co(null, null, 'https://www.charlie-staffing.example'));
+  perform pg_temp.add(b, 3, pg_temp.co('Golf Partners', 'golf-partners', 'https://uk.trustpilot.com/review/charlie-staffing.example'));
+  perform pg_temp.add(b, 4, pg_temp.co('Charlie Staffing', 'charlie-staffing', 'https://charlie-staffing.example'));
+  perform public.contact_import_classify(b);
+  perform pg_temp.expect('I4 across batches: domain alone → review; name + domain → matched; shared host ignored', null, format(
+    $q$select string_agg(row_number || ':' || classification || ':' || company_status, ' ' order by row_number)
+         from public.contact_import_rows where batch_id = %L$q$, b),
+    '1:needs_review:needs_review 2:needs_review:needs_review 3:new:new 4:matched:matched');
+  perform pg_temp.check('I4 the domain owner is offered as a candidate, never chosen',
+    (select company_match is null and company_candidates -> 0 ->> 'name' = 'Charlie Staffing'
+            and company_candidates -> 0 -> 'reasons' = '["domain"]'
+       from public.contact_import_rows where batch_id = b and row_number = 1)
+    and (select reasons[1] like 'No company name in this row. Its website domain belongs to "Charlie Staffing"%'
+       from public.contact_import_rows where batch_id = b and row_number = 2));
+  v_co := (select count(*) from public.contacts where company_id = (select id from public.companies where slug = 'charlie-staffing'));
+  set local role service_role;
+  v := public.contact_import_commit(b, pg_temp.id('B'));
+  reset role;
+  perform pg_temp.check('I5 nothing is written to the domain owner, and Delta People''s contact is not attached to it',
+    v ->> 'status' = 'committed'
+    and (select count(*) from public.contacts where company_id = (select id from public.companies where slug = 'charlie-staffing')) = v_co
+    and not exists (select 1 from public.contacts where email = 'dee@delta-people.example'));
+end $$;
+
+-- =============================================================================
+-- 5d. "Create" never bypasses an exact email/LinkedIn duplicate
+-- =============================================================================
+do $$
+declare b1 uuid := pg_temp.batch('A', 'create-1.xlsx'); b2 uuid := pg_temp.batch('B', 'create-2.xlsx'); v jsonb;
+begin
+  -- Same name as Pat Kim at Beta Talent, no phone to confirm: review. Both admins decide "create".
+  perform pg_temp.add(b1, 1, pg_temp.co('Beta Talent', 'beta-talent'), pg_temp.ct('Pat Kim', 'pat.kim@new-mail.example'));
+  perform pg_temp.add(b2, 1, pg_temp.co('Beta Talent', 'beta-talent'), pg_temp.ct('Pat Kim', 'Pat.Kim@new-mail.example'));
+  perform public.contact_import_classify(b1); perform public.contact_import_classify(b2);
+  update public.contact_import_rows set resolution = '{"contact": {"action": "create"}}' where batch_id in (b1, b2);
+  perform public.contact_import_classify(b1); perform public.contact_import_classify(b2);
+  perform pg_temp.check('J1 both pending batches preview as new',
+    (select bool_and(classification = 'new') from public.contact_import_rows where batch_id in (b1, b2)));
+
+  set local role service_role;
+  v := public.contact_import_commit(b1, pg_temp.id('A'));
+  v := public.contact_import_commit(b2, pg_temp.id('B'));
+  reset role;
+  perform pg_temp.check('J2 the second batch''s "create" does not duplicate the contact the first created',
+    (select count(*) from public.contacts where public.ci_norm_email(email) = 'pat.kim@new-mail.example') = 1
+    and (v -> 'contacts' ->> 'created')::int = 0);
+  perform pg_temp.check('J2 …the row is held for review, and the history says why',
+    (select classification = 'needs_review' and result_status = 'skipped'
+            and result -> 'reasons' ->> 0 like 'Cannot create a new contact: 1 existing contact(s) already have this email%'
+       from public.contact_import_rows where batch_id = b2));
+  perform pg_temp.check('J3 the duplicate is offered as a candidate to match instead',
+    (select contact_candidates -> 0 ->> 'email' = 'pat.kim@new-mail.example' from public.contact_import_rows where batch_id = b2));
+end $$;
+
+do $$
+declare b uuid := pg_temp.batch('A', 'create-linkedin.xlsx');
+begin
+  perform pg_temp.add(b, 1, pg_temp.co('Acme Recruitment Ltd', 'acme-recruitment'),
+                      pg_temp.ct('Patricia Kim', null, null, 'https://uk.linkedin.com/in/patkim'));
+  update public.contact_import_rows set resolution = '{"contact": {"action": "create"}}' where batch_id = b;
+  perform public.contact_import_classify(b);
+  perform pg_temp.check('J4 a "create" whose LinkedIn profile already exists (at another company) needs review',
+    (select contact_status = 'needs_review' and contact_candidates -> 0 ->> 'id' = pg_temp.id('K3')::text
+       from public.contact_import_rows where batch_id = b));
+end $$;
+
+-- =============================================================================
+-- 5e. Filling an empty email never gives two contacts the same one
+-- =============================================================================
+do $$
+declare b uuid := pg_temp.batch('A', 'fill-guard.xlsx'); v jsonb;
+begin
+  -- Row 1 creates Nina with an email; row 2 matches Sam Lee (K2, no email) by phone and carries the same email.
+  perform pg_temp.add(b, 1, pg_temp.co('Beta Talent', 'beta-talent'), pg_temp.ct('Nina New', 'nina@shared.example'));
+  perform pg_temp.add(b, 2, pg_temp.co('Beta Talent', 'beta-talent'), pg_temp.ct('Sam Lee', 'NINA@shared.example', '020 7946 0000'));
+  perform public.contact_import_classify(b);
+  perform pg_temp.expect('K1 preview', null, format(
+    $q$select string_agg(row_number || ':' || coalesce(contact_status, '-'), ' ' order by row_number) from public.contact_import_rows where batch_id = %L$q$, b),
+    '1:new 2:matched');
+  set local role service_role;
+  v := public.contact_import_commit(b, pg_temp.id('A'));
+  reset role;
+  perform pg_temp.check('K2 the email is not copied onto Sam Lee: one contact has it, the other is reported',
+    (select count(*) from public.contacts where public.ci_norm_email(email) = 'nina@shared.example') = 1
+    and (select email is null from public.contacts where id = pg_temp.id('K2'))
+    and (select result -> 'conflicts' -> 0 ->> 'reason' = 'used_by_other_contact' and result -> 'conflicts' -> 0 ->> 'field' = 'email'
+           from public.contact_import_rows where batch_id = b and row_number = 2));
+end $$;
+
+do $$
+declare b uuid := pg_temp.batch('A', 'fill-then-new.xlsx'); v jsonb;
+begin
+  -- The other order: row 1 fills Sam Lee's empty email; row 2 is a "new" person with that email.
+  perform pg_temp.add(b, 1, pg_temp.co('Beta Talent', 'beta-talent'), pg_temp.ct('Sam Lee', 'sam@beta.example', '020 7946 0000'));
+  perform pg_temp.add(b, 2, pg_temp.co('Beta Talent', 'beta-talent'), pg_temp.ct('S. Lee', 'SAM@beta.example', null, null, 'Director'));
+  perform public.contact_import_classify(b);
+  perform pg_temp.expect('K3 preview: the second row is the contact the first fills in', null, format(
+    $q$select string_agg(row_number || ':' || coalesce(contact_status, '-'), ' ' order by row_number) from public.contact_import_rows where batch_id = %L$q$, b),
+    '1:matched 2:duplicate_in_file');
+  set local role service_role;
+  v := public.contact_import_commit(b, pg_temp.id('A'));
+  reset role;
+  perform pg_temp.check('K4 one contact has the email (Sam Lee), and no second contact was created',
+    (select count(*) from public.contacts where public.ci_norm_email(email) = 'sam@beta.example') = 1
+    and (select email = 'sam@beta.example' and job_title = 'Director' from public.contacts where id = pg_temp.id('K2'))
+    and (v -> 'contacts' ->> 'created')::int = 0);
+end $$;
+
+-- =============================================================================
+-- 5f. An upload that never finished can't be previewed or imported
+-- =============================================================================
+do $$
+declare b uuid := pg_temp.batch('A', 'half-uploaded.xlsx');
+begin
+  update public.contact_import_batches set status = 'uploading' where id = b;
+  perform pg_temp.add(b, 1, pg_temp.co('Half Co', 'half-co'));
+  perform pg_temp.deny('L1 classify refuses an unfinished upload', 'service_role',
+    format('select public.contact_import_classify(%L)', b), '^CI400');
+  perform pg_temp.deny('L1 commit refuses an unfinished upload', 'service_role',
+    format('select public.contact_import_commit(%L, %L)', b, pg_temp.id('A')), '^CI400');
+end $$;
+
+-- =============================================================================
 -- 6. Privileges and the company-delete guard
 -- =============================================================================
 do $$
@@ -446,6 +647,14 @@ begin
     perform pg_temp.deny(format('G1 %s cannot classify', r), r,
       format('select public.contact_import_classify(%L)', pg_temp.b('B1')), '^42501');
   end loop;
+  foreach r in array array['anon', 'authenticated'] loop
+    perform pg_temp.check(format('G1 %s has no rights on the import rows'' id sequence', r),
+      not has_sequence_privilege(r, 'public.contact_import_rows_id_seq', 'USAGE')
+      and not has_sequence_privilege(r, 'public.contact_import_rows_id_seq', 'SELECT')
+      and not has_sequence_privilege(r, 'public.contact_import_rows_id_seq', 'UPDATE'));
+  end loop;
+  perform pg_temp.check('G1 service_role can still use it',
+    has_sequence_privilege('service_role', 'public.contact_import_rows_id_seq', 'USAGE'));
   perform pg_temp.check('G2 RLS is on for every public table',
     not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity));
   perform pg_temp.check('G3 existing RPCs keep their grants (048 touches only its own functions)',

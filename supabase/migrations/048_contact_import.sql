@@ -14,7 +14,9 @@
 --                                   LinkedIn profile / domain / name"; preview
 --                                   and commit both match through them
 --    * contact_import_classify()  — preview: matched / new / needs_review /
---                                   invalid / skipped, per row
+--                                   invalid / skipped, per row. A company
+--                                   matches by exact name or verified alias
+--                                   only; a website domain alone never does
 --    * contact_import_commit()    — the import, in ONE transaction under an
 --                                   advisory lock: any row error rolls every
 --                                   write back and records row-level errors
@@ -86,18 +88,43 @@ language sql immutable parallel safe set search_path = pg_catalog as $$
                  '^www\.', '') as h) x
 $$;
 
--- Job boards, social sites, link shorteners and webmail never identify an
--- employer: a "website" on one of these is not a company domain.
+-- Hosts shared by many organisations never identify an employer: a "website"
+-- on one of these (or any subdomain of one) is not a company domain. Job
+-- boards and applicant-tracking systems, social sites, maps and review sites,
+-- link shorteners, webmail, and site builders/hosting where every customer
+-- lives under the same domain. Even so, a domain alone never matches a
+-- company (contact_import_classify); this list only keeps such hosts out of
+-- canonical_domain and out of the candidates an admin is shown.
 create or replace function public.ci_generic_domain(p text) returns boolean
 language sql immutable parallel safe set search_path = pg_catalog as $$
   select p is not null and exists (
     select 1 from unnest(array[
+      -- job boards and applicant tracking
       'linkedin.com', 'lnkd.in', 'indeed.com', 'indeed.co.uk', 'reed.co.uk', 'totaljobs.com', 'cv-library.co.uk',
-      'glassdoor.com', 'glassdoor.co.uk', 'adzuna.co.uk', 'monster.co.uk', 'jobsite.co.uk', 'cwjobs.co.uk',
-      'gov.uk', 'google.com', 'facebook.com', 'instagram.com', 'twitter.com', 'x.com', 'youtube.com',
-      'bit.ly', 'tinyurl.com', 'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'hotmail.co.uk',
-      'live.com', 'yahoo.com', 'yahoo.co.uk', 'icloud.com', 'lever.co', 'greenhouse.io', 'workable.com',
-      'smartrecruiters.com', 'myworkdayjobs.com', 'teamtailor.com', 'bamboohr.com']) g
+      'glassdoor.com', 'glassdoor.co.uk', 'adzuna.co.uk', 'adzuna.com', 'monster.co.uk', 'monster.com', 'jobsite.co.uk',
+      'cwjobs.co.uk', 'ziprecruiter.co.uk', 'ziprecruiter.com', 'simplyhired.co.uk', 'jooble.org', 'efinancialcareers.com',
+      'guardianjobs.co.uk', 'jobs.ac.uk', 'lever.co', 'greenhouse.io', 'workable.com', 'smartrecruiters.com',
+      'myworkdayjobs.com', 'teamtailor.com', 'bamboohr.com', 'recruitee.com', 'jobvite.com', 'icims.com', 'ashbyhq.com',
+      'breezy.hr', 'pinpointhq.com', 'applytojob.com', 'personio.de', 'personio.com', 'hibob.com',
+      -- government, search, maps, reviews and company directories
+      'gov.uk', 'google.com', 'google.co.uk', 'goo.gl', 'g.page', 'maps.apple.com', 'bing.com', 'trustpilot.com',
+      'yell.com', 'crunchbase.com', 'zoominfo.com', 'endole.co.uk', 'companycheck.co.uk',
+      -- social and content
+      'facebook.com', 'fb.com', 'instagram.com', 'twitter.com', 'x.com', 'youtube.com', 'youtu.be', 'tiktok.com',
+      'pinterest.com', 'threads.net', 'medium.com', 'substack.com', 'linktr.ee', 'about.me', 'wa.me', 'whatsapp.com',
+      'calendly.com', 'eventbrite.co.uk', 'eventbrite.com',
+      -- link shorteners
+      'bit.ly', 'tinyurl.com', 'ow.ly', 't.co', 'rebrand.ly', 'forms.gle',
+      -- webmail
+      'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'hotmail.co.uk', 'live.com', 'live.co.uk', 'msn.com',
+      'yahoo.com', 'yahoo.co.uk', 'icloud.com', 'me.com', 'aol.com', 'protonmail.com', 'proton.me', 'gmx.com',
+      'btinternet.com', 'sky.com', 'virginmedia.com',
+      -- site builders, hosting and file sharing
+      'wixsite.com', 'wix.com', 'squarespace.com', 'weebly.com', 'wordpress.com', 'blogspot.com', 'godaddysites.com',
+      'webflow.io', 'carrd.co', 'notion.site', 'github.io', 'github.com', 'gitlab.io', 'netlify.app', 'vercel.app',
+      'herokuapp.com', 'pages.dev', 'firebaseapp.com', 'web.app', 'azurewebsites.net', 'cloudfront.net',
+      'amazonaws.com', 'myshopify.com', 'square.site', 'sharepoint.com', 'dropbox.com', 'typeform.com',
+      'jotform.com', 'hubspotpagebuilder.com', 'hs-sites.com', 'list-manage.com']) g
     where p = g or p like '%.' || g)
 $$;
 
@@ -129,8 +156,12 @@ create table if not exists public.contact_import_batches (
   file_kind    text not null check (file_kind in ('xlsx', 'csv')),
   file_sha256  text not null,
   file_size    integer not null check (file_size >= 0),
+  -- 'uploading' until every row is stored: a batch the upload never finished
+  -- stays marked as such (and can't be mapped or committed) rather than
+  -- passing for a complete file.
   status       text not null default 'uploaded'
-               check (status in ('uploaded', 'previewed', 'committed', 'failed')),
+               constraint contact_import_batches_status_check
+               check (status in ('uploading', 'uploaded', 'previewed', 'committed', 'failed')),
   sheets       jsonb not null default '[]',   -- [{name, index, headers, suggested_mapping, row_count}]
   mapping      jsonb,                         -- {sheet: {include, group_fill, columns: {col: role}}}
   summary      jsonb,
@@ -141,6 +172,10 @@ create table if not exists public.contact_import_batches (
   committed_at timestamptz,
   committed_by uuid
 );
+-- Re-runs over an earlier draft of this migration pick up 'uploading'.
+alter table public.contact_import_batches drop constraint if exists contact_import_batches_status_check;
+alter table public.contact_import_batches add constraint contact_import_batches_status_check
+  check (status in ('uploading', 'uploaded', 'previewed', 'committed', 'failed'));
 create index if not exists contact_import_batches_created_idx on public.contact_import_batches (created_at desc);
 create index if not exists contact_import_batches_sha_idx on public.contact_import_batches (file_sha256);
 
@@ -199,6 +234,17 @@ begin
       execute format('grant select, insert, update, delete on public.%I to service_role', t);
     end if;
   end loop;
+  -- contact_import_rows.id's identity sequence: Supabase's default privileges
+  -- hand it to anon and authenticated too. Only service_role inserts rows.
+  execute 'revoke all on sequence public.contact_import_rows_id_seq from public';
+  foreach r in array array['anon', 'authenticated'] loop
+    if exists (select 1 from pg_roles where rolname = r) then
+      execute format('revoke all on sequence public.contact_import_rows_id_seq from %I', r);
+    end if;
+  end loop;
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    execute 'grant usage, select on sequence public.contact_import_rows_id_seq to service_role';
+  end if;
 end
 $$;
 
@@ -330,7 +376,7 @@ declare
   c jsonb; ct jsonb; res_c jsonb; res_k jsonb;
   v_name text; v_nkey text; v_slug text; v_dom text;
   v_em text; v_li text; v_nm text; v_ph text; v_ckey text; v_key text; v_url text;
-  v_dom_ids uuid[]; v_name_ids uuid[]; v_alias_ids uuid[]; v_all uuid[]; v_slug_ids uuid[];
+  v_dom_ids uuid[]; v_name_ids uuid[]; v_alias_ids uuid[]; v_named uuid[]; v_all uuid[]; v_slug_ids uuid[];
   v_ids uuid[]; v_ph_ids uuid[]; v_job_ids uuid[];
   v_cs text; v_ks text; v_cls text; v_cid uuid; v_cref bigint; v_kref bigint;
   v_cm jsonb; v_km jsonb; v_cc jsonb; v_kc jsonb; v_reasons text[];
@@ -339,6 +385,9 @@ declare
 begin
   if not exists (select 1 from public.contact_import_batches b where b.id = p_batch) then
     raise exception 'import batch % not found', p_batch using errcode = 'CI404';
+  end if;
+  if exists (select 1 from public.contact_import_batches b where b.id = p_batch and b.status = 'uploading') then
+    raise exception 'import batch % did not finish uploading', p_batch using errcode = 'CI400';
   end if;
 
   for r in select * from public.contact_import_rows x where x.batch_id = p_batch order by x.sheet_index, x.row_number loop
@@ -379,7 +428,8 @@ begin
          where v_nkey is not null and public.ci_norm_name(co.name) = v_nkey;
         select coalesce(array_agg(distinct a.company_id), '{}') into v_alias_ids from public.company_aliases a
          where v_nkey is not null and a.normalized_alias = v_nkey;
-        select coalesce(array_agg(distinct u), '{}') into v_all from unnest(v_dom_ids || v_name_ids || v_alias_ids) u;
+        select coalesce(array_agg(distinct u), '{}') into v_named from unnest(v_name_ids || v_alias_ids) u;
+        select coalesce(array_agg(distinct u), '{}') into v_all from unnest(v_dom_ids || v_named) u;
         select coalesce(array_agg(co.id), '{}') into v_slug_ids from public.companies co
          where v_slug is not null and co.slug = v_slug and not (co.id = any (v_all));
 
@@ -407,20 +457,36 @@ begin
           else
             v_cs := 'new';
           end if;
-        elsif cardinality(v_all) = 1 then
-          v_cid := v_all[1];
+        elsif cardinality(v_named) = 1 and v_dom_ids <@ v_named then
+          -- Matched only when the name (or a verified alias) identifies one
+          -- company and the website, if any, points nowhere else.
+          v_cid := v_named[1];
           v_cs := 'matched';
-          v_cm := jsonb_build_object('id', v_cid, 'method',
-                    case when v_cid = any (v_dom_ids) then 'domain' when v_cid = any (v_name_ids) then 'name' else 'alias' end);
+          v_cm := jsonb_build_object('id', v_cid, 'method', case when v_cid = any (v_name_ids) then 'name' else 'alias' end);
         elsif cardinality(v_all) > 1 then
           v_cs := 'needs_review';
-          v_reasons := array_append(v_reasons, format('Matches %s existing companies by domain, name or alias. Choose one, or skip.', cardinality(v_all)));
+          v_reasons := array_append(v_reasons, format('Matches %s existing companies by name, alias or website domain. Choose one, or skip.', cardinality(v_all)));
+        elsif cardinality(v_dom_ids) = 1 then
+          -- A website domain alone is never a match: different companies share
+          -- hosts, parents and agencies. The name has to agree, or an admin decides.
+          v_cs := 'needs_review';
+          v_reasons := array_append(v_reasons, case when v_nkey is null
+            then format('No company name in this row. Its website domain belongs to "%s": confirm the match, or skip.',
+                        (select co.name from public.companies co where co.id = v_dom_ids[1]))
+            else format('Same website domain as "%s", but a different name. Confirm the match (and save "%s" as an alias if it is the same company), create a separate company, or skip.',
+                        (select co.name from public.companies co where co.id = v_dom_ids[1]), v_name) end);
         elsif cardinality(v_slug_ids) > 0 then
           v_cs := 'needs_review';
           v_reasons := array_append(v_reasons, 'Similar to an existing company (same normalized name once legal suffixes are removed). Confirm the match, or skip.');
-        elsif (v_nkey is not null and v_pc ? ('n:' || v_nkey)) or (v_dom is not null and v_pc ? ('d:' || v_dom)) then
+        elsif v_nkey is not null and v_pc ? ('n:' || v_nkey) then
+          -- In-file grouping is by exact normalized name only, never by domain.
           v_cs := 'new_pending';
-          v_cref := coalesce((v_pc ->> ('n:' || v_nkey))::bigint, (v_pc ->> ('d:' || v_dom))::bigint);
+          v_cref := (v_pc ->> ('n:' || v_nkey))::bigint;
+        elsif v_dom is not null and v_pc ? ('d:' || v_dom) then
+          v_cs := 'needs_review';
+          v_reasons := array_append(v_reasons, case when v_nkey is null
+            then format('No company name in this row, and another row in this file (row id %s) creates the company with this website. Skip it.', v_pc ->> ('d:' || v_dom))
+            else format('Another row in this file (row id %s) creates a company with the same website domain under a different name. Create this one as a separate company, or skip.', v_pc ->> ('d:' || v_dom)) end);
         elsif v_nkey is null then
           v_cs := 'needs_review';
           v_reasons := array_append(v_reasons, 'No company name in this row and no existing company with its domain. Match one, or skip.');
@@ -466,14 +532,22 @@ begin
             v_ks := 'invalid'; v_reasons := array_append(v_reasons, 'The contact chosen for this row is not at the matched company (or no longer exists).');
           end if;
         else
-          if res_k ->> 'action' is distinct from 'create' then
+          select coalesce(array_agg(k.id), '{}') into v_ids from public.contacts k
+           where v_em is not null and public.ci_norm_email(k.email) = v_em;
+          if cardinality(v_ids) = 0 then
             select coalesce(array_agg(k.id), '{}') into v_ids from public.contacts k
-             where v_em is not null and public.ci_norm_email(k.email) = v_em;
-            if cardinality(v_ids) = 0 then
-              select coalesce(array_agg(k.id), '{}') into v_ids from public.contacts k
-               where v_li is not null and public.ci_norm_linkedin(k.linkedin_url) = v_li;
-            end if;
+             where v_li is not null and public.ci_norm_linkedin(k.linkedin_url) = v_li;
+          end if;
 
+          if res_k ->> 'action' = 'create' then
+            -- "Create" overrides an uncertain name match, never an exact
+            -- email/LinkedIn duplicate. Re-checked at commit, under the lock,
+            -- so a contact another batch created in the meantime counts too.
+            if cardinality(v_ids) > 0 then
+              v_ks := 'needs_review';
+              v_reasons := array_append(v_reasons, format('Cannot create a new contact: %s existing contact(s) already have this email/LinkedIn profile. Match the one at this company, or leave the contact out.', cardinality(v_ids)));
+            end if;
+          else
             if cardinality(v_ids) = 1 and v_cid is not null
                and (select k.company_id from public.contacts k where k.id = v_ids[1]) = v_cid then
               v_ks := 'matched';
@@ -544,6 +618,18 @@ begin
           if v_ckey is not null and v_nm is not null and v_ph is not null then
             v_pt := v_pt || jsonb_build_object('p:' || v_ckey || '|' || v_nm || '|' || v_ph, r.id);
           end if;
+        elsif v_ks = 'matched' then
+          -- A matched contact whose empty email/profile this row fills in owns
+          -- that value from here on: a later row with it is the same person,
+          -- not a new contact sharing their email.
+          if v_em is not null and not (v_pt ? ('e:' || v_em)) and exists (
+               select 1 from public.contacts k where k.id = (v_km ->> 'id')::uuid and nullif(btrim(k.email), '') is null) then
+            v_pt := v_pt || jsonb_build_object('e:' || v_em, r.id);
+          end if;
+          if v_li is not null and not (v_pt ? ('l:' || v_li)) and exists (
+               select 1 from public.contacts k where k.id = (v_km ->> 'id')::uuid and nullif(btrim(k.linkedin_url), '') is null) then
+            v_pt := v_pt || jsonb_build_object('l:' || v_li, r.id);
+          end if;
         end if;
       end if;
     end if;
@@ -607,10 +693,10 @@ declare
   r record;
   c jsonb; ct jsonb; res_c jsonb;
   v_nkey text; v_slug text; v_dom text; v_web text; v_em text; v_li text; v_nm text; v_ph text;
-  v_cid uuid; v_kid uuid; v_alias_owner uuid; v_existing record; v_co record;
+  v_cid uuid; v_kid uuid; v_other uuid; v_alias_owner uuid; v_existing record; v_co record;
   v_company_action text; v_contact_action text; v_conflicts jsonb; v_set jsonb; v_act text; v_notes text;
   v_aliases int := 0;
-  v_ck jsonb := '{}';   -- created companies by key (n:/d:/s:) -> id
+  v_ck jsonb := '{}';   -- companies created by this import, by exact name (n:) -> id
   v_kk jsonb := '{}';   -- created contacts by key (e:/l:/p:) -> id
   v_errors jsonb := '[]';
   v_summary jsonb;
@@ -639,7 +725,10 @@ begin
           update public.contact_import_rows x
              set result_status = 'skipped', error = null,
                  result = jsonb_build_object('reason', case r.classification
-                   when 'invalid' then 'invalid' when 'needs_review' then 'needs_review (unresolved)' else 'skipped by an admin' end)
+                   when 'invalid' then 'invalid' when 'needs_review' then 'needs_review (unresolved)' else 'skipped by an admin' end,
+                   -- Why, as of this commit: a row decided in the preview can need review
+                   -- again if another import created the same contact in the meantime.
+                   'reasons', to_jsonb(r.reasons))
            where x.id = r.id;
           continue;
         end if;
@@ -654,11 +743,24 @@ begin
         -- ── Company ──
         if r.company_status = 'matched' then
           v_cid := (r.company_match ->> 'id')::uuid;
+        else  -- new / new_pending: one company per exact name, however many rows name it
+          v_cid := (v_ck ->> ('n:' || v_nkey))::uuid;
+          if v_cid is null then
+            insert into public.companies (name, slug, website, canonical_domain)
+            values (c ->> 'name', v_slug, v_web, v_dom)
+            returning id into v_cid;
+            v_company_action := 'created';
+            v_ck := v_ck || jsonb_build_object('n:' || v_nkey, v_cid);
+          else
+            v_company_action := 'in_file';   -- created by an earlier row of this import
+          end if;
+        end if;
+        if v_company_action <> 'created' then
           select co.* into v_co from public.companies co where co.id = v_cid for update;
           if v_dom is not null then
             if v_co.website is null and v_co.website_url is null and v_co.canonical_domain is null then
               update public.companies co set website = v_web, canonical_domain = v_dom, updated_at = now() where co.id = v_cid;
-              v_company_action := 'updated';
+              if v_company_action = 'matched' then v_company_action := 'updated'; end if;
             elsif v_dom is distinct from coalesce(public.ci_norm_domain(v_co.canonical_domain), public.ci_norm_domain(v_co.website),
                                                   public.ci_norm_domain(v_co.website_url)) then
               v_conflicts := v_conflicts || jsonb_build_object('record', 'company', 'field', 'website',
@@ -676,16 +778,6 @@ begin
               raise exception 'the alias "%" already belongs to another company', c ->> 'name' using errcode = 'CI422';
             end if;
           end if;
-        else  -- new / new_pending: one company per key, however many rows name it
-          v_cid := coalesce((v_ck ->> ('n:' || v_nkey))::uuid, (v_ck ->> ('d:' || v_dom))::uuid);
-          if v_cid is null then
-            insert into public.companies (name, slug, website, canonical_domain)
-            values (c ->> 'name', v_slug, v_web, v_dom)
-            returning id into v_cid;
-            v_company_action := 'created';
-            v_ck := v_ck || jsonb_build_object('n:' || v_nkey, v_cid, 's:' || v_slug, v_cid);
-            if v_dom is not null then v_ck := v_ck || jsonb_build_object('d:' || v_dom, v_cid); end if;
-          end if;
         end if;
 
         -- ── Contact ──
@@ -702,6 +794,16 @@ begin
           end if;
 
           if v_kid is null then
+            -- The preview already sent existing emails/profiles to review; this
+            -- catches one written since by anything outside the import lock.
+            select k.id into v_other from public.contacts k
+             where (v_em is not null and public.ci_norm_email(k.email) = v_em)
+                or (v_li is not null and public.ci_norm_linkedin(k.linkedin_url) = v_li)
+             limit 1;
+            if v_other is not null then
+              raise exception 'contact % already has this email address or LinkedIn profile; match or skip this contact', v_other
+                using errcode = 'CI422';
+            end if;
             insert into public.contacts (company_id, full_name, job_title, email, phone, linkedin_url, notes)
             values (v_cid, btrim(ct ->> 'full_name'), nullif(btrim(ct ->> 'job_title'), ''), nullif(btrim(ct ->> 'email'), ''),
                     nullif(btrim(ct ->> 'phone'), ''), nullif(btrim(ct ->> 'linkedin_url'), ''), v_notes)
@@ -718,6 +820,21 @@ begin
             foreach f in array array['job_title', 'email', 'phone', 'linkedin_url'] loop
               v_act := public.contact_import_merge_action(to_jsonb(v_existing) ->> f, ct ->> f,
                          case f when 'email' then 'email' when 'phone' then 'phone' when 'linkedin_url' then 'linkedin' else 'text' end);
+              if v_act = 'fill' and f in ('email', 'linkedin_url') then
+                -- Filling an empty email/profile must not give a second contact one
+                -- that is already someone's: report it instead.
+                select k.id into v_other from public.contacts k
+                 where k.id <> v_kid
+                   and case f when 'email' then public.ci_norm_email(k.email) = v_em
+                              else public.ci_norm_linkedin(k.linkedin_url) = v_li end
+                 limit 1;
+                if v_other is not null then
+                  v_act := 'conflict';
+                  v_conflicts := v_conflicts || jsonb_build_object('record', 'contact', 'field', f, 'existing', null,
+                                   'incoming', ct ->> f, 'reason', 'used_by_other_contact', 'other_contact_id', v_other);
+                  continue;
+                end if;
+              end if;
               if v_act = 'fill' then
                 v_set := v_set || jsonb_build_object(f, btrim(ct ->> f));
               elsif v_act = 'conflict' then
@@ -740,6 +857,9 @@ begin
                      updated_at = now()
                where k.id = v_kid;
               v_contact_action := 'updated';
+              -- Later rows with the email/profile filled in here are this contact.
+              if v_set ? 'email' and v_em is not null then v_kk := v_kk || jsonb_build_object('e:' || v_em, v_kid); end if;
+              if v_set ? 'linkedin_url' and v_li is not null then v_kk := v_kk || jsonb_build_object('l:' || v_li, v_kid); end if;
             else
               v_contact_action := 'matched';
             end if;
