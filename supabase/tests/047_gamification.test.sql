@@ -500,7 +500,12 @@ begin
     not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
                  where n.nspname = 'public' and p.prokind = 'f'
                    and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
-                   and p.oid::regprocedure::text not in (select sig from k_funcs union all select sig from k_existing)));
+                   and p.oid::regprocedure::text not in (select sig from k_funcs union all select sig from k_existing)
+                   -- Functions added by later migrations (each tests its own grants):
+                   -- 048 contact importer.
+                   and p.proname not in ('ci_norm_name', 'ci_norm_email', 'ci_norm_phone', 'ci_norm_linkedin', 'ci_norm_domain',
+                                         'ci_generic_domain', 'contact_import_classify', 'contact_import_commit',
+                                         'contact_import_merge_action')));
 
   perform pg_temp.check('K5 RLS is on for every public table',
     not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity));
