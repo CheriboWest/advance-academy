@@ -14,9 +14,6 @@
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(git show:*)"
-    ],
-    "deny": [
-      "Bash(git push:*)"
     ]
   }
 }
