@@ -12,12 +12,12 @@
  * Pure apart from the injected `read`/`extract`, so every path is testable.
  */
 import { AuthenticationError } from '@anthropic-ai/sdk';
-import type { CoverLetterJdErrorCode } from '@advance-academy/contracts/cover-letter';
+import { COVER_LETTER_JD_MIN_CHARS, type CoverLetterJdErrorCode } from '@advance-academy/contracts/cover-letter';
 import { isBlockedDomain, type UrlReadResult } from '../../services/outreach-extractor.service.js';
 import { shouldFetchJd } from './prompts.js';
 
 /** Below this there is nothing to tailor a letter to: about 30 words, i.e. a title and a line. */
-export const JD_MIN_CHARS = 200;
+export const JD_MIN_CHARS = COVER_LETTER_JD_MIN_CHARS;
 
 const HTTP_STATUS = { badRequest: 400, unprocessable: 422, badGateway: 502, timeout: 504 } as const;
 

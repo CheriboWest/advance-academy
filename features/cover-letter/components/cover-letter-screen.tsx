@@ -16,6 +16,7 @@ import { ProgressBar } from '@/shared/components/progress-bar'
 import { CvPicker } from '@/features/cv-library/components/cv-picker'
 import { useSavedJobs } from '@/features/job-tracking/hooks/use-job-tracking'
 import { useGenerateCoverLetter } from '../hooks/use-cover-letter'
+import { JdRecovery } from './jd-recovery'
 
 type JobMode = 'saved' | 'paste'
 
@@ -60,7 +61,9 @@ export function CoverLetterScreen() {
   const [jobDescription, setJobDescription] = useState('')
   // A tracked job whose link can't be read: the student pastes its description here.
   const [savedJobDescription, setSavedJobDescription] = useState('')
-  const [needsJd, setNeedsJd] = useState(false)
+  // Set when the JD couldn't be read: the backend's reason, shown in the recovery panel.
+  const [jdProblem, setJdProblem] = useState<string | null>(null)
+  const needsJd = jdProblem !== null
   const jdBoxRef = useRef<HTMLTextAreaElement>(null)
   const [letter, setLetter] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -91,8 +94,8 @@ export function CoverLetterScreen() {
 
   // After a JD error, put the cursor where the fix goes.
   useEffect(() => {
-    if (needsJd) jdBoxRef.current?.focus()
-  }, [needsJd, mode])
+    if (jdProblem) jdBoxRef.current?.focus()
+  }, [jdProblem, mode])
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -113,12 +116,19 @@ export function CoverLetterScreen() {
     try {
       const res = await generate.mutateAsync(body)
       finish()
+      setJdProblem(null)
       setLetter(res.coverLetter)
     } catch (err) {
       reset()
       const code = err instanceof HttpClientError ? err.payload.code : undefined
       setError(code === 'TIMEOUT' ? SLOW_MESSAGE : err instanceof Error ? err.message : 'Could not write the cover letter.')
-      if (wantsPastedJd(code)) setNeedsJd(true)
+      if (wantsPastedJd(code)) {
+        // The recovery panel replaces the plain error; every input stays as it is.
+        setJdProblem(code === 'TIMEOUT' ? SLOW_MESSAGE : err instanceof Error ? err.message : SLOW_MESSAGE)
+        setError(null)
+      } else {
+        setJdProblem(null)
+      }
     }
   }
 
@@ -133,6 +143,7 @@ export function CoverLetterScreen() {
   }
 
   const savedTo = generate.data?.savedJobId
+  const selectedJob = mode === 'saved' ? savedJobs.find((j) => j.id === savedJobId) ?? null : null
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
@@ -170,6 +181,14 @@ export function CoverLetterScreen() {
             ))}
           </div>
 
+          {jdProblem ? (
+            <JdRecovery
+              message={jdProblem}
+              jobUrl={mode === 'saved' ? selectedJob?.jobUrl ?? null : jobUrl}
+              card={selectedJob ? { id: selectedJob.id, title: selectedJob.title, companyName: selectedJob.companyName } : null}
+              pastedChars={(mode === 'saved' ? savedJobDescription : jobDescription).trim().length}
+            />
+          ) : null}
           {mode === 'saved' ? (
             savedJobs.length ? (
               <div className="space-y-3">
@@ -179,7 +198,7 @@ export function CoverLetterScreen() {
                   onChange={(e) => {
                     setSavedJobId(e.target.value)
                     setSavedJobDescription('')
-                    setNeedsJd(false)
+                    setJdProblem(null)
                   }}
                   className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
@@ -303,9 +322,9 @@ export function CoverLetterScreen() {
             {savedTo ? (
               <>
                 {' '}
-                Saved to this job in{' '}
-                <Link href="/jobs" className="text-primary underline">
-                  your tracker
+                Saved to{' '}
+                <Link href={`/jobs/${savedTo}/apply`} className="text-primary underline">
+                  this job in your tracker
                 </Link>
                 .
               </>

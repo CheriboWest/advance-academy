@@ -12,7 +12,7 @@ const JOB_ID = '22222222-2222-2222-2222-222222222222'
 
 const state = vi.hoisted(() => ({
   params: new URLSearchParams(),
-  jobs: [] as Array<{ id: string; title: string; companyName: string | null; status: string }>,
+  jobs: [] as Array<{ id: string; title: string; companyName: string | null; status: string; jobUrl?: string | null }>,
   mutateAsync: vi.fn(),
   data: undefined as undefined | { coverLetter: string; savedJobId: string | null; notice?: string | null },
 }))
@@ -72,7 +72,7 @@ describe('CoverLetterScreen — unusable job description', () => {
 
   it('tracked job: reveals a Job description box, then sends the pasted text with the card id', async () => {
     state.params = new URLSearchParams({ cv: CV_ID, savedJob: JOB_ID })
-    state.jobs = [{ id: JOB_ID, title: 'Data Analyst', companyName: 'Acme', status: 'saved' }]
+    state.jobs = [{ id: JOB_ID, title: 'Data Analyst', companyName: 'Acme', status: 'saved', jobUrl: 'https://jobs.example.com/acme/1' }]
     state.mutateAsync.mockRejectedValueOnce(jdError('JD_URL_INACCESSIBLE', 'We couldn’t open that job link: the page was not found…'))
     render(<CoverLetterScreen />)
     expect(screen.queryByLabelText('Job description')).toBeNull()
@@ -130,5 +130,105 @@ describe('CoverLetterScreen — letter written from the pasted text', () => {
     await submit()
     expect(screen.getByRole('status').textContent).toBe(notice)
     expect((screen.getByLabelText('Cover letter text') as HTMLTextAreaElement).value).toBe('Dear Hiring Manager,')
+  })
+})
+
+describe('CoverLetterScreen — JD recovery panel', () => {
+  const PASTED = 'Responsibilities: build SQL reports for finance. Requirements: SQL, Python, stakeholder communication. '.repeat(3)
+
+  it('failed URL extraction shows why, a link to the posting in a new tab, and how to paste', async () => {
+    state.params = new URLSearchParams({ cv: CV_ID, url: 'https://careers.example.com/jobs/42?ref=hub', title: 'Data Analyst' })
+    state.mutateAsync.mockRejectedValue(jdError('JD_URL_UNREADABLE', 'We opened that link but found no job description on the page.'))
+    render(<CoverLetterScreen />)
+    await submit()
+
+    const panel = screen.getByRole('alert')
+    expect(panel.textContent).toMatch(/couldn't read the job description automatically/)
+    expect(panel.textContent).toMatch(/found no job description on the page/)
+    expect(panel.textContent).toMatch(/Copy the full job description/)
+    expect(panel.textContent).toMatch(/Paste it into the Job description box below/)
+    const link = screen.getByRole('link', { name: /Open the job posting/ })
+    expect(link.getAttribute('href')).toBe('https://careers.example.com/jobs/42?ref=hub')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toContain('noopener')
+    expect(link.getAttribute('rel')).toContain('noreferrer')
+    expect(panel.textContent).toMatch(/on careers\.example\.com/)
+    expect(panel.textContent).toMatch(/0 of at least 200 characters pasted/)
+  })
+
+  it('never links a non-web address (e.g. javascript:) — it says where to look instead', async () => {
+    state.params = new URLSearchParams({ cv: CV_ID, url: 'javascript:alert(1)', title: 'Data Analyst' })
+    state.mutateAsync.mockRejectedValue(jdError('JD_URL_UNREACHABLE', 'We couldn’t reach that link.', 502))
+    render(<CoverLetterScreen />)
+    await submit()
+    expect(screen.queryByRole('link', { name: /Open the job posting/ })).toBeNull()
+    expect(screen.getByRole('alert').textContent).toMatch(/Open the job posting where you found it/)
+  })
+
+  it('retrying with a pasted JD keeps every other input and sends it all again', async () => {
+    state.params = new URLSearchParams({ cv: CV_ID, url: 'https://jobs.example.com/9', title: 'Data Analyst', company: 'Acme' })
+    state.mutateAsync.mockRejectedValueOnce(jdError('JD_URL_TIMEOUT', 'The job page took too long to load.', 504))
+    render(<CoverLetterScreen />)
+    await submit()
+
+    // Nothing the student typed is lost.
+    expect((screen.getByLabelText('Job title *') as HTMLInputElement).value).toBe('Data Analyst')
+    expect((screen.getByLabelText('Company') as HTMLInputElement).value).toBe('Acme')
+    expect((screen.getByLabelText('Job link') as HTMLInputElement).value).toBe('https://jobs.example.com/9')
+    expect((screen.getByLabelText('Your CV') as HTMLSelectElement).value).toBe(CV_ID)
+
+    fireEvent.change(screen.getByLabelText('Job description'), { target: { value: PASTED } })
+    expect(screen.getByRole('alert').textContent).toMatch(/characters pasted — ready to try again/)
+
+    state.mutateAsync.mockResolvedValueOnce({ coverLetter: 'Dear Hiring Manager,', savedJobId: null, jobTitle: 'Data Analyst', companyName: 'Acme' })
+    await submit()
+    expect(state.mutateAsync).toHaveBeenLastCalledWith({
+      cvVersionId: CV_ID,
+      jobTitle: 'Data Analyst',
+      companyName: 'Acme',
+      jobUrl: 'https://jobs.example.com/9',
+      jobDescription: PASTED.trim(),
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect((screen.getByLabelText('Cover letter text') as HTMLTextAreaElement).value).toBe('Dear Hiring Manager,')
+  })
+
+  it('tracked job: links the posting and the original card, retries against the same card, and links the card after', async () => {
+    state.params = new URLSearchParams({ cv: CV_ID, savedJob: JOB_ID })
+    state.jobs = [{ id: JOB_ID, title: 'Data Analyst', companyName: 'Acme', status: 'saved', jobUrl: 'https://www.linkedin.com/jobs/view/7' }]
+    state.mutateAsync.mockRejectedValueOnce(jdError('JD_URL_SIGN_IN', 'LinkedIn job pages need a sign-in, so we can’t read them.'))
+    render(<CoverLetterScreen />)
+    await submit()
+
+    expect(screen.getByRole('link', { name: /Open the job posting/ }).getAttribute('href')).toBe('https://www.linkedin.com/jobs/view/7')
+    const card = screen.getByRole('link', { name: 'Data Analyst — Acme' })
+    expect(card.getAttribute('href')).toBe(`/jobs/${JOB_ID}/apply`)
+    expect(screen.getByRole('alert').textContent).toMatch(/still be saved to your tracked job/)
+    expect((screen.getByLabelText('Saved job') as HTMLSelectElement).value).toBe(JOB_ID)
+
+    fireEvent.change(screen.getByLabelText('Job description'), { target: { value: PASTED } })
+    state.mutateAsync.mockImplementationOnce(async () => {
+      state.data = { coverLetter: 'Dear Hiring Manager,', savedJobId: JOB_ID }
+      return { ...state.data, jobTitle: 'Data Analyst', companyName: 'Acme' }
+    })
+    await submit()
+    expect(state.mutateAsync).toHaveBeenLastCalledWith({ cvVersionId: CV_ID, savedJobId: JOB_ID, jobDescription: PASTED.trim() })
+    expect(screen.getByRole('link', { name: 'this job in your tracker' }).getAttribute('href')).toBe(`/jobs/${JOB_ID}/apply`)
+  })
+
+  it('picking another tracked job clears the panel and the pasted text (they were for the old job)', async () => {
+    const OTHER = '33333333-3333-3333-3333-333333333333'
+    state.params = new URLSearchParams({ cv: CV_ID, savedJob: JOB_ID })
+    state.jobs = [
+      { id: JOB_ID, title: 'Data Analyst', companyName: 'Acme', status: 'saved', jobUrl: 'https://jobs.example.com/1' },
+      { id: OTHER, title: 'BI Analyst', companyName: 'Beta', status: 'saved', jobUrl: 'https://jobs.example.com/2' },
+    ]
+    state.mutateAsync.mockRejectedValueOnce(jdError('JD_URL_INACCESSIBLE', 'We couldn’t open that job link.'))
+    render(<CoverLetterScreen />)
+    await submit()
+    fireEvent.change(screen.getByLabelText('Job description'), { target: { value: PASTED } })
+    fireEvent.change(screen.getByLabelText('Saved job'), { target: { value: OTHER } })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByLabelText('Job description')).toBeNull()
   })
 })
