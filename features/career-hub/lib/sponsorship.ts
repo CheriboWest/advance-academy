@@ -169,11 +169,18 @@ export async function getSponsoredCompanyPage(params: {
     q: params.q,
     page: String(params.page),
   });
-  const response = await fetch(`${baseUrl}/sponsors/companies?${query}`, {
-    headers: { Authorization: `Bearer ${session.access_token}` },
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error(`Could not load companies (${response.status}).`);
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/sponsors/companies?${query}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error("Could not load companies: the Career Hub API didn't respond. Try again in a moment.");
+  }
+  if (!response.ok) {
+    throw new Error(`Could not load companies (${response.status}).${await errorDetail(response)}`);
+  }
   const data = (await response.json()) as {
     companies: Array<{
       id: string;
@@ -203,4 +210,22 @@ export async function getSponsoredCompanyPage(params: {
       contacts: c.contacts,
     })),
   };
+}
+
+/**
+ * backend-python's own explanation of a failed request (FastAPI's `detail`),
+ * as " <detail>", or "" when there is none — an unhandled error's plain-text
+ * "Internal Server Error", or a validation error's list. Only a string detail
+ * is shown, capped, so the page never renders a raw payload.
+ */
+async function errorDetail(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body?.detail === "string" && body.detail.trim()) {
+      return ` ${body.detail.trim().slice(0, 300)}`;
+    }
+  } catch {
+    // Not JSON.
+  }
+  return "";
 }

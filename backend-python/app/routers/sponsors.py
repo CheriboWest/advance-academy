@@ -213,6 +213,37 @@ async def sponsorship_stats(
 COMPANY_PAGE_SIZE = 30
 
 
+def _company_page_error(exc: httpx.HTTPStatusError) -> HTTPException:
+    """What a failed `coach_company_page` call tells the coach.
+
+    `coach_company_page` was added to migration 048 after 048 was first
+    published, so a database that ran the earlier 048 (or none) has no such
+    function and PostgREST answers 404 PGRST202. That is a deployment step, not
+    a transient error, so it gets its own message naming the fix — as
+    companies.py does for the permanent-delete function.
+    """
+    try:
+        body = exc.response.json()
+    except ValueError:
+        body = None
+    code = body.get("code") if isinstance(body, dict) else None
+    logger.warning("coach_company_page failed: HTTP %s %s", exc.response.status_code, code or "")
+    if code == "PGRST202":
+        return HTTPException(
+            status_code=503,
+            detail=(
+                "The database is missing coach_company_page(): section 4 of "
+                "supabase/migrations/048_all_companies_and_hourly_expiry.sql "
+                "has not been applied."
+            ),
+        )
+    suffix = f" ({code})" if isinstance(code, str) and code else ""
+    return HTTPException(
+        status_code=502,
+        detail=f"The company list could not be loaded: the database returned an error{suffix}.",
+    )
+
+
 @router.get("/companies", response_model=dict)
 async def sponsored_company_page(
     scope: str = Query("licensed", pattern="^(licensed|all)$"),
@@ -231,18 +262,35 @@ async def sponsored_company_page(
     settings = get_settings()
     rest = _require_supabase(settings)
 
-    async with httpx.AsyncClient() as client:
-        rows = await rest.rpc(
-            client,
-            "coach_company_page",
-            {
-                "p_coach": user_id,
-                "p_licensed": scope == "licensed",
-                "p_q": q.strip() or None,
-                "p_offset": (page - 1) * COMPANY_PAGE_SIZE,
-                "p_limit": COMPANY_PAGE_SIZE,
-            },
-        )
+    try:
+        async with httpx.AsyncClient() as client:
+            rows = await rest.rpc(
+                client,
+                "coach_company_page",
+                {
+                    "p_coach": user_id,
+                    "p_licensed": scope == "licensed",
+                    "p_q": q.strip() or None,
+                    "p_offset": (page - 1) * COMPANY_PAGE_SIZE,
+                    "p_limit": COMPANY_PAGE_SIZE,
+                },
+            )
+    except httpx.HTTPStatusError as exc:
+        # rest.rpc has already logged PostgREST's code and message. Before this
+        # handler every database failure surfaced as a bare "500 Internal
+        # Server Error" and the page could only say "Could not load companies
+        # (500)".
+        raise _company_page_error(exc) from exc
+    except httpx.TimeoutException as exc:
+        logger.warning("coach_company_page timed out")
+        raise HTTPException(
+            status_code=504, detail="The company list took too long to load. Try again."
+        ) from exc
+    except httpx.HTTPError as exc:
+        logger.warning("coach_company_page: could not reach Supabase (%s)", type(exc).__name__)
+        raise HTTPException(
+            status_code=502, detail="The company list could not be loaded: the database didn't respond."
+        ) from exc
 
     rows = rows or []
     return {
