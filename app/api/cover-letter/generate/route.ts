@@ -32,9 +32,21 @@ export async function POST(request: Request) {
     })
     const data = await res.json().catch(() => ({}))
     return NextResponse.json(data, { status: res.status })
-  } catch {
+  } catch (error) {
+    // The backend keeps the whole request inside this deadline (see cover-letter.service.ts);
+    // past it, the usual cause is a slow job site.
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      return NextResponse.json(
+        {
+          code: 'COVER_LETTER_TIMEOUT',
+          message:
+            'This took too long, usually because the job page was slow to load. Paste the job description into the Job description box and try again.',
+        },
+        { status: 504 },
+      )
+    }
     return NextResponse.json(
-      { code: 'COVER_LETTER_FAILED', message: 'Could not write the cover letter. Please try again.' },
+      { code: 'COVER_LETTER_FAILED', message: 'Could not reach the cover letter service. Please try again.' },
       { status: 502 },
     )
   }

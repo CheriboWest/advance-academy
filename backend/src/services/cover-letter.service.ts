@@ -3,17 +3,13 @@ import type {
   GenerateCoverLetterResponse,
 } from '@advance-academy/contracts/cover-letter';
 import type { SavedJobStatus } from '@advance-academy/contracts/job-tracking';
-import { AuthenticationError } from '@anthropic-ai/sdk';
 import { assertLlmConfigured, createAnthropicClient, getFeatureModel, withRetry } from '../lib/llm-anthropic.js';
 import { newCostBucket } from '../lib/cost-tracker.js';
-import {
-  COVER_LETTER_SYSTEM_PROMPT,
-  JD_MISSING_CHARS,
-  buildCoverLetterUserMessage,
-  shouldFetchJd,
-} from '../lib/cover-letter/prompts.js';
+import { COVER_LETTER_SYSTEM_PROMPT, buildCoverLetterUserMessage } from '../lib/cover-letter/prompts.js';
+import { resolveJobDescription, type JdDeps } from '../lib/cover-letter/jd.js';
 import { getCvVersion } from './cv-knowledge.service.js';
-import { extractJobFromUrl } from './job-extraction.service.js';
+import { extractJobFromMarkdown } from './job-extraction.service.js';
+import { readUrl } from './outreach-extractor.service.js';
 import { getSavedJob, updateSavedJob } from './job-tracking.service.js';
 import { spendCreditsWith } from '../lib/credits.js';
 import { mapGamificationDbError } from '../lib/gamification-errors.js';
@@ -31,9 +27,28 @@ import { getSupabase } from '../lib/supabase.js';
 // saved_jobs.description is capped at 5000 by the tracker's validator; keep the stored copy inside it.
 const MAX_STORED_JD = 5000;
 
-function httpError(statusCode: number, message: string): Error {
-  return Object.assign(new Error(message), { statusCode });
+function httpError(statusCode: number, message: string, extra: { code?: string; expose?: boolean } = {}): Error {
+  return Object.assign(new Error(message), { statusCode, ...extra });
 }
+
+/**
+ * Time budget. The browser and the Next proxy give up at 120s, so the whole
+ * request has to finish inside that: reading the link (12s × 2 attempts + 1s
+ * backoff), picking the JD out of it (25s, no SDK retry) and writing the letter
+ * (60s). With the defaults the read alone could take ~48s and the extraction had
+ * the SDK's 10-minute timeout, so a slow job site ran the request past the
+ * proxy's deadline and the student saw only "Please try again".
+ */
+const JD_READ = { timeoutMs: 12_000, maxRetries: 2 };
+const JD_EXTRACT = { timeoutMs: 25_000, maxRetries: 0 };
+const LETTER_CLIENT = { timeoutMs: 60_000, maxRetries: 0 }; // withRetry below still retries overloads
+
+const jdDeps: JdDeps = {
+  read: (url) => readUrl(url, JD_READ),
+  extract: (markdown) => extractJobFromMarkdown(markdown, JD_EXTRACT),
+  // The site and the outcome only: never the full link (it can carry tracking ids) or any JD text.
+  log: ({ host, code }) => console.warn('[cover-letter] job link unusable', host, code),
+};
 
 interface ResolvedJob {
   title: string;
@@ -42,6 +57,7 @@ interface ResolvedJob {
   url: string | null;
   savedJobId: string | null;
   status: SavedJobStatus | null;
+  notice: string | null;
 }
 
 async function resolveJob(userId: string, req: GenerateCoverLetterRequest): Promise<ResolvedJob> {
@@ -53,10 +69,12 @@ async function resolveJob(userId: string, req: GenerateCoverLetterRequest): Prom
     job = {
       title: j.title,
       companyName: j.companyName,
-      description: j.description ?? '',
+      // A description pasted on the screen beats the card's (its link may be unreadable).
+      description: req.jobDescription?.trim() || j.description || '',
       url: j.jobUrl,
       savedJobId: j.id,
       status: j.status,
+      notice: null,
     };
   } else {
     job = {
@@ -66,38 +84,23 @@ async function resolveJob(userId: string, req: GenerateCoverLetterRequest): Prom
       url: req.jobUrl?.trim() || null,
       savedJobId: null,
       status: null,
+      notice: null,
     };
   }
+  const pastedForCard = Boolean(req.savedJobId && req.jobDescription?.trim());
 
-  if (shouldFetchJd(job.description, job.url)) {
-    try {
-      const extracted = await extractJobFromUrl(job.url!);
-      const fetched = extracted.jobDescription.trim();
-      if (fetched.length > job.description.length) {
-        job.description = fetched;
-        job.title ||= extracted.jobTitle.trim();
-        job.companyName ||= extracted.companyName.trim() || null;
-        // Keep the fetched JD on the card so the next tool doesn't pay to fetch it again.
-        if (job.savedJobId) {
-          await updateSavedJob(userId, job.savedJobId, { description: fetched.slice(0, MAX_STORED_JD) });
-        }
-      }
-    } catch (error) {
-      // A rejected key would otherwise surface below as "couldn't read that link".
-      if (error instanceof AuthenticationError) throw error;
-      // Plenty of job boards block bots (Adzuna redirects do); carry on with what we have.
-      console.warn('[cover-letter] JD fetch failed', job.url, error instanceof Error ? error.message : error);
-    }
+  // Throws a JdError (code + recovery message) when there is no usable JD.
+  const jd = await resolveJobDescription({ description: job.description, url: job.url }, jdDeps);
+  job.description = jd.description;
+  job.notice = jd.notice;
+  if (jd.fetched) {
+    job.title ||= jd.fetched.jobTitle;
+    job.companyName ||= jd.fetched.companyName || null;
   }
-
-  if (!job.title) throw httpError(400, 'A job title is required.');
-  if (job.description.length < JD_MISSING_CHARS) {
-    throw httpError(
-      400,
-      job.url
-        ? "We couldn't read the job description from that link. Paste the description instead."
-        : 'Paste the job description so the letter can match it.',
-    );
+  if (!job.title) throw httpError(400, 'A job title is required.', { code: 'INVALID_REQUEST' });
+  // Keep a fetched or pasted JD on the card so the next tool doesn't have to fetch it again.
+  if (job.savedJobId && (jd.fetched || pastedForCard)) {
+    await updateSavedJob(userId, job.savedJobId, { description: job.description.slice(0, MAX_STORED_JD) });
   }
   return job;
 }
@@ -112,7 +115,7 @@ export async function generateCoverLetter(
   const job = await resolveJob(userId, req);
 
   assertLlmConfigured('coverLetter');
-  const anthropic = createAnthropicClient('coverLetter', { timeoutMs: 60_000 });
+  const anthropic = createAnthropicClient('coverLetter', LETTER_CLIENT);
   const model = getFeatureModel('coverLetter');
   const cost = newCostBucket('coverLetter.generate');
 
@@ -137,12 +140,16 @@ export async function generateCoverLetter(
   cost.llm('generate', model, response.usage);
   cost.flush();
 
-  if (response.stop_reason === 'max_tokens') throw httpError(502, 'The letter came back cut off. Please try again.');
+  if (response.stop_reason === 'max_tokens') {
+    throw httpError(502, 'The letter came back cut off. Please try again — no credit was used.', { code: 'LLM_FAILED', expose: true });
+  }
   const coverLetter = response.content
     .map((block) => (block.type === 'text' ? block.text : ''))
     .join('')
     .trim();
-  if (!coverLetter) throw httpError(502, 'The letter came back empty. Please try again.');
+  if (!coverLetter) {
+    throw httpError(502, 'The letter came back empty. Please try again — no credit was used.', { code: 'LLM_FAILED', expose: true });
+  }
 
   await chargeAndSaveCoverLetter(userId, job.savedJobId, coverLetter, cv.id);
 
@@ -151,6 +158,7 @@ export async function generateCoverLetter(
     jobTitle: job.title,
     companyName: job.companyName,
     savedJobId: job.savedJobId,
+    notice: job.notice,
   };
 }
 

@@ -59,7 +59,10 @@
 - `outreach.service.ts` orchestrates `outreach-extractor`, `-enrichment`,
   `-jd-validator`, `-rerank` — find the right sub-service before editing.
 - Cover Letter writes the letter and CV back onto the saved job and moves a `saved`
-  card to `preparing`; a thin JD with a link is fetched via `extractJobFromUrl` first.
+  card to `preparing`. Whether there is a usable JD is decided in `lib/cover-letter/jd.ts`
+  (thin JD + link → `readUrl` + `extractJobFromMarkdown`, inside a time budget that fits the
+  120s proxy): below `JD_MIN_CHARS` it throws a `JdError` with a `JD_*` code and a
+  "paste the description" message — never write from scraps. Log the link's host only.
 - Coach Understanding sends the CV with no size cap — mind token cost if inputs grow.
 
 ## Gamification (`gamification.service.ts`, `routes/gamification.ts`)
