@@ -125,6 +125,41 @@ async function selectAll<T>(
   }
 }
 
+/**
+ * Every row of a query in two round trips however many pages it spans: the
+ * first page also asks for the exact count, then the rest are fetched
+ * together. `selectAll` costs one round trip per 1,000 rows, one after the
+ * other — and from the Next server each is a request to Supabase, so on the
+ * Companies tab the wait grew with every thousand companies hiring.
+ *
+ * Pages step by what the first page actually returned, so a project whose
+ * API "Max rows" is under 1,000 still gets every row instead of stopping after
+ * one short page. Rows written between the requests can shift a page
+ * boundary (as with selectAll); callers that key by id should dedupe.
+ */
+async function selectAllCounted<T>(
+  page: (
+    from: number,
+    to: number,
+    withCount: boolean
+  ) => PromiseLike<{ data: T[] | null; error: { message: string } | null; count?: number | null }>
+): Promise<T[]> {
+  const first = await page(0, PAGE_ROWS - 1, true);
+  if (first.error) throw new Error(first.error.message);
+  const rows = [...(first.data ?? [])];
+  const total = first.count ?? rows.length;
+  const step = rows.length;
+  if (step === 0 || step >= total) return rows;
+
+  const rest = [];
+  for (let from = step; from < total; from += step) rest.push(page(from, from + step - 1, false));
+  for (const { data, error } of await Promise.all(rest)) {
+    if (error) throw new Error(error.message);
+    rows.push(...(data ?? []));
+  }
+  return rows;
+}
+
 /** Aggregate all data shown on the coach dashboard. */
 export async function getDashboardData(): Promise<CoachDashboardData> {
   const supabase = await createSupabaseServerClient();
@@ -222,10 +257,12 @@ export async function getDashboardData(): Promise<CoachDashboardData> {
  *   - `false` (default) → the coach's visible companies (`hidden = false`)
  *   - `true`            → the coach's removed companies (`hidden = true`)
  *
- * Filtering is done server-side against the coach's own meta rows: the meta is
- * read first (cheap, RLS-scoped), then the `public_company_summary` query is
- * narrowed with `id in`/`id not in` so we never pull the full company set to
- * filter in JS.
+ * "All companies" reads the coach's meta rows (RLS-scoped) and the companies
+ * hiring at the same time, then drops the hidden ones here: a coach hides a
+ * handful of companies, so that costs a few rows, where waiting for the meta
+ * first cost a whole round trip — and an `id not in (…)` filter grew the URL
+ * by ~37 bytes per hidden company. "Removed" still narrows with `id in`, since
+ * it needs only the hidden set.
  */
 export async function getCoachCompanies(
   options: { hidden?: boolean } = {}
@@ -233,39 +270,57 @@ export async function getCoachCompanies(
   const hidden = options.hidden ?? false;
   const supabase = await createSupabaseServerClient();
 
-  const { data: metaData, error: metaError } = await supabase
-    .from("coach_company_meta")
-    .select("company_id, starred, notes, hidden");
-  if (metaError) throw new Error(metaError.message);
+  const readMeta = async () => {
+    const { data, error } = await supabase
+      .from("coach_company_meta")
+      .select("company_id, starred, notes, hidden");
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  };
+  const companyColumns = "id, slug, name, region, hq_location, open_jobs, lead_score";
 
-  const metaByCompany = new Map(
-    (metaData ?? []).map((meta) => [meta.company_id as string, meta])
-  );
-  const hiddenIds = (metaData ?? [])
-    .filter((meta) => meta.hidden)
-    .map((meta) => meta.company_id as string);
+  let metaData: Awaited<ReturnType<typeof readMeta>>;
+  let companiesData: Array<Record<string, unknown>>;
+  if (hidden) {
+    metaData = await readMeta();
+    const hiddenIds = metaData.filter((meta) => meta.hidden).map((meta) => meta.company_id as string);
+    // The "Removed" view is exactly the hidden set — empty if nothing is
+    // hidden, so skip the companies query entirely.
+    if (hiddenIds.length === 0) return [];
+    companiesData = await selectAll((from, to) =>
+      supabase
+        .from("public_company_summary")
+        .select(companyColumns)
+        // Every removed company, hiring or not, so any of them can be restored.
+        .in("id", hiddenIds)
+        .order("name", { ascending: true })
+        .order("id")
+        .range(from, to)
+    );
+  } else {
+    [metaData, companiesData] = await Promise.all([
+      readMeta(),
+      selectAllCounted((from, to, withCount) =>
+        supabase
+          .from("public_company_summary")
+          .select(companyColumns, withCount ? { count: "exact" } : undefined)
+          .gt("open_jobs", 0) // hiring, as before 048
+          .order("name", { ascending: true })
+          .order("id")
+          .range(from, to)
+      ),
+    ]);
+    const hiddenIds = new Set(metaData.filter((meta) => meta.hidden).map((meta) => meta.company_id as string));
+    const seen = new Set<string>();
+    companiesData = companiesData.filter((company) => {
+      const id = company.id as string;
+      if (hiddenIds.has(id) || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }
 
-  // The "Removed" view is exactly the hidden set — empty if nothing is hidden,
-  // so skip the companies query entirely.
-  if (hidden && hiddenIds.length === 0) return [];
-
-  const companiesData = await selectAll((from, to) => {
-    let companiesQuery = supabase
-      .from("public_company_summary")
-      .select("id, slug, name, region, hq_location, open_jobs, lead_score")
-      .order("name", { ascending: true })
-      .order("id")
-      .range(from, to);
-
-    if (hidden) {
-      // Every removed company, hiring or not, so any of them can be restored.
-      companiesQuery = companiesQuery.in("id", hiddenIds);
-    } else {
-      companiesQuery = companiesQuery.gt("open_jobs", 0); // hiring, as before 048
-      if (hiddenIds.length) companiesQuery = companiesQuery.not("id", "in", inList(hiddenIds));
-    }
-    return companiesQuery;
-  });
+  const metaByCompany = new Map(metaData.map((meta) => [meta.company_id as string, meta]));
 
   return companiesData.map((company) => {
     const meta = metaByCompany.get(company.id as string);
