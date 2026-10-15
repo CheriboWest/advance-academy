@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Form from "next/form";
 import {
   ArrowUpRight,
   Briefcase,
@@ -77,8 +78,9 @@ export function SponsoredCompaniesList({
 
   return (
     <div className="space-y-4">
-      <form
-        method="get"
+      {/* next/form: the same GET, as a client-side navigation. A plain <form>
+          reloaded the whole document on every search or scope change. */}
+      <Form
         action="/coach/sponsored-companies"
         className="flex flex-col gap-2 sm:flex-row sm:items-center"
       >
@@ -105,7 +107,7 @@ export function SponsoredCompaniesList({
         <Button type="submit" variant="outline">
           Search
         </Button>
-      </form>
+      </Form>
 
       <p className="text-sm text-muted-foreground">
         {data.total.toLocaleString("en-GB")}{" "}
@@ -180,7 +182,9 @@ export function SponsoredCompaniesList({
               </div>
 
               <Button asChild variant="outline" className="w-full">
-                <Link href={`/coach/sponsored-companies/${company.company_id}`}>
+                {/* Not prefetched: 30 cards meant 30 prefetch requests per page
+                    view, each through middleware's Supabase Auth call. */}
+                <Link href={`/coach/sponsored-companies/${company.company_id}`} prefetch={false}>
                   View company
                   <ArrowUpRight className="size-4" />
                 </Link>

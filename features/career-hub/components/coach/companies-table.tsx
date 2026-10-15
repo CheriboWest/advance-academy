@@ -38,11 +38,21 @@ interface CompaniesTableProps {
  * Deletion — single or bulk — always goes through the confirmation dialog and a
  * server action; the browser never writes to the database.
  */
+/**
+ * Rows rendered at a time. The tab used to render every company hiring —
+ * ~2,000 rows, each with a checkbox, a notes dialog and four buttons — which
+ * measured 13.6 MB of HTML, ~2.4 s of main-thread work and ~4.2 s before the
+ * first row appeared, and every search keystroke re-rendered them all. Search
+ * and the count still cover every row; only the rendering is incremental.
+ */
+export const ROWS_PER_STEP = 100;
+
 export function CompaniesTable({ rows, view = "all" }: CompaniesTableProps) {
   const removed = view === "removed";
   const router = useRouter();
   const [data, setData] = React.useState(rows);
   const [query, setQuery] = React.useState("");
+  const [shownCount, setShownCount] = React.useState(ROWS_PER_STEP);
   const [pendingId, setPendingId] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
@@ -71,14 +81,17 @@ export function CompaniesTable({ rows, view = "all" }: CompaniesTableProps) {
     );
   }, [data, query]);
 
+  const shown = React.useMemo(() => filtered.slice(0, shownCount), [filtered, shownCount]);
+
   // Selection is scoped to what is currently displayed: "select all" means the
-  // filtered view, and the bulk bar counts only rows the coach can see.
+  // rows on screen, and the bulk bar counts only rows the coach can see — a
+  // bulk *permanent delete* must never reach rows that were never rendered.
   const selectedRows = React.useMemo(
-    () => filtered.filter((row) => selectedIds.has(row.company_id)),
-    [filtered, selectedIds]
+    () => shown.filter((row) => selectedIds.has(row.company_id)),
+    [shown, selectedIds]
   );
   const allVisibleSelected =
-    filtered.length > 0 && selectedRows.length === filtered.length;
+    shown.length > 0 && selectedRows.length === shown.length;
   const someVisibleSelected =
     selectedRows.length > 0 && !allVisibleSelected;
 
@@ -103,9 +116,9 @@ export function CompaniesTable({ rows, view = "all" }: CompaniesTableProps) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allVisibleSelected) {
-        for (const row of filtered) next.delete(row.company_id);
+        for (const row of shown) next.delete(row.company_id);
       } else {
-        for (const row of filtered) next.add(row.company_id);
+        for (const row of shown) next.add(row.company_id);
       }
       return next;
     });
@@ -200,7 +213,10 @@ export function CompaniesTable({ rows, view = "all" }: CompaniesTableProps) {
         <Input
           type="search"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setShownCount(ROWS_PER_STEP);
+          }}
           placeholder="Search by company or location"
           aria-label="Search companies"
           className="h-11 pl-9"
@@ -288,7 +304,7 @@ export function CompaniesTable({ rows, view = "all" }: CompaniesTableProps) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row) => {
+              {shown.map((row) => {
                 const selected = selectedIds.has(row.company_id);
                 return (
                   <tr
@@ -309,6 +325,9 @@ export function CompaniesTable({ rows, view = "all" }: CompaniesTableProps) {
                     <td className="px-4 py-3">
                       <Link
                         href={`/coach/sponsored-companies/${row.company_id}`}
+                        // Not prefetched: each visible row's prefetch was its own
+                        // server request (middleware's Supabase Auth call included).
+                        prefetch={false}
                         className="font-medium underline-offset-4 hover:text-primary hover:underline"
                       >
                         {row.name}
@@ -396,6 +415,17 @@ export function CompaniesTable({ rows, view = "all" }: CompaniesTableProps) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {shown.length < filtered.length && (
+        <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
+          <span>
+            Showing {shown.length.toLocaleString("en-GB")} of {filtered.length.toLocaleString("en-GB")}
+          </span>
+          <Button variant="outline" size="sm" onClick={() => setShownCount((count) => count + ROWS_PER_STEP)}>
+            Show {Math.min(ROWS_PER_STEP, filtered.length - shown.length)} more
+          </Button>
         </div>
       )}
 

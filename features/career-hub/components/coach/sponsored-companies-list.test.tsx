@@ -1,15 +1,22 @@
 // <SponsoredCompaniesList> renders one server-side page (GET /sponsors/companies):
 // contact counts arrive with the rows, badges stream in after, and the
 // pagination links keep the search and scope.
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SponsoredCompaniesList } from "@/features/career-hub/components/coach/sponsored-companies-list";
 import type { SponsoredCompanyPage } from "@/features/career-hub/lib/types";
 
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
-    <a href={href}>{children}</a>
+  default: ({ href, prefetch, children }: { href: string; prefetch?: boolean; children: React.ReactNode }) => (
+    <a href={href} data-prefetch={String(prefetch)}>{children}</a>
+  ),
+}));
+// Stands in for next/form so the test can see the search uses it (a client-side
+// navigation) rather than a plain <form> (a full document reload).
+vi.mock("next/form", () => ({
+  default: ({ action, children, ...rest }: { action: string; children: React.ReactNode }) => (
+    <form action={action} data-next-form="" {...rest}>{children}</form>
   ),
 }));
 
@@ -80,5 +87,21 @@ describe("SponsoredCompaniesList", () => {
     expect(screen.getByText("Previous").closest("a")?.getAttribute("href")).toBe(
       "/coach/sponsored-companies?scope=all&q=acme"
     );
+  });
+
+  it("searches with a client-side navigation, not a full page reload", () => {
+    render(<SponsoredCompaniesList data={pageOf([ABSOLUTE_RECRUIT])} scope="all" q="acme" page={1} />);
+    const form = screen.getByRole("searchbox", { name: "Search companies" }).closest("form");
+    expect(form?.hasAttribute("data-next-form")).toBe(true);
+    expect(form?.getAttribute("action")).toBe("/coach/sponsored-companies");
+    // Same GET fields as before, so the URL a search produces is unchanged.
+    expect((screen.getByRole("searchbox", { name: "Search companies" }) as HTMLInputElement).name).toBe("q");
+    expect((screen.getByRole("combobox", { name: "Which companies" }) as HTMLSelectElement).name).toBe("scope");
+  });
+
+  it("does not prefetch every card's company link", () => {
+    render(<SponsoredCompaniesList data={pageOf([ABSOLUTE_RECRUIT])} scope="licensed" q="" page={1} />);
+    const link = within(card()).getByRole("link", { name: /View company/ });
+    expect(link.getAttribute("data-prefetch")).toBe("false");
   });
 });
