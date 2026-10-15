@@ -81,10 +81,23 @@ export async function extractJobFromUrl(url: string): Promise<ExtractedJob> {
   }
 
   const markdown = await extractTextFromUrl(url);
+  return extractJobFromMarkdown(markdown);
+}
+
+/**
+ * The LLM half of extractJobFromUrl, for a caller that read the page itself
+ * (Cover Letter, which needs to know *why* a page failed and must fit a
+ * deadline: pass `timeoutMs`/`maxRetries`; omitted, the SDK defaults apply as
+ * before). Throws statusCode 502 when the model returns nothing usable.
+ */
+export async function extractJobFromMarkdown(
+  markdown: string,
+  clientOptions: { timeoutMs?: number; maxRetries?: number } = {},
+): Promise<ExtractedJob> {
   const truncated = markdown.length > MAX_MARKDOWN_CHARS ? markdown.slice(0, MAX_MARKDOWN_CHARS) : markdown;
 
   assertLlmConfigured('interviewPrep');
-  const anthropic = createAnthropicClient('interviewPrep');
+  const anthropic = createAnthropicClient('interviewPrep', clientOptions);
   const model = getFeatureModel('interviewPrep');
 
   const response = await anthropic.messages.create({

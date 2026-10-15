@@ -89,10 +89,30 @@ async function withJinaRetry<T>(fn: () => Promise<T>, maxRetries = JINA_MAX_RETR
   return fn();
 }
 
+/** Why a page could not be read: the reader timed out, answered with an HTTP error,
+ *  could not be reached, or returned no text. */
+export type UrlReadFailure = 'timeout' | 'http' | 'network' | 'empty';
+
+export interface UrlReadResult {
+  content: string;
+  /**
+   * The status the *job site* answered Jina with, when Jina reports one (e.g. a
+   * 403 sign-in wall or a 404 expired posting). Jina still returns 200 with the
+   * error page's text in that case, so callers that need a real page check this.
+   */
+  targetStatus: number | null;
+}
+
+const TARGET_STATUS_RE = /returned error (\d{3})/i;
+
 /** Single Jina fetch attempt with an enforced request timeout via AbortController. */
-async function fetchJinaContent(targetUrl: string, headers: Record<string, string>): Promise<string> {
+async function fetchJinaContent(
+  targetUrl: string,
+  headers: Record<string, string>,
+  timeoutMs = JINA_TIMEOUT_MS,
+): Promise<UrlReadResult> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), JINA_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`https://r.jina.ai/${targetUrl}`, {
       method: 'GET',
@@ -101,40 +121,83 @@ async function fetchJinaContent(targetUrl: string, headers: Record<string, strin
     });
 
     if (!res.ok) {
+      // Jina answers 4xx/5xx itself when it cannot load the page at all; its
+      // body may name the site's own status ("…returned error 403").
+      const body = await res.text().catch(() => '');
+      const target = TARGET_STATUS_RE.exec(body);
       // Attach `status` so isTransientJinaError can decide whether to retry.
-      throw Object.assign(new Error(`Jina API failed with status ${res.status}`), { status: res.status });
+      throw Object.assign(new Error(`Jina API failed with status ${res.status}`), {
+        status: res.status,
+        targetStatus: target ? Number(target[1]) : null,
+      });
     }
 
     // Jina returns a JSON object when requested with Accept: json
-    // Format: { data: { title: string, content: string, url: string } }
+    // Format: { data: { title: string, content: string, url: string, warning?: string } }
     const data = await res.json() as any;
     const content = data?.data?.content || data?.text || data?.content;
+    const warning = typeof data?.data?.warning === 'string' ? data.data.warning : '';
+    const target = TARGET_STATUS_RE.exec(warning);
 
     if (!content) {
-      throw new Error('No content returned from URL');
+      throw Object.assign(new Error('No content returned from URL'), {
+        targetStatus: target ? Number(target[1]) : null,
+      });
     }
 
-    return content.trim();
+    return { content: content.trim(), targetStatus: target ? Number(target[1]) : null };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-export async function extractTextFromUrl(targetUrl: string): Promise<string> {
+function readFailure(err: unknown): UrlReadFailure {
+  const e = err as { name?: string; status?: number; message?: string } | null;
+  if (e?.name === 'AbortError' || e?.name === 'TimeoutError') return 'timeout';
+  if (typeof e?.status === 'number') return 'http';
+  if (err instanceof TypeError) return 'network';
+  return 'empty';
+}
+
+function jinaHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { Accept: 'application/json' };
   const jinaKey = process.env.JINA_API_KEY?.trim();
+  if (jinaKey) headers['Authorization'] = `Bearer ${jinaKey}`;
+  return headers;
+}
 
-  const headers: Record<string, string> = {
-    'Accept': 'application/json',
-  };
-
-  if (jinaKey) {
-    headers['Authorization'] = `Bearer ${jinaKey}`;
-  }
-
-  // Add x-return-format if necessary, but Accept JSON usually defaults to markdown inside "content"
+/**
+ * Read a page as text through Jina Reader, saying why when it can't.
+ *
+ * `timeoutMs` (per attempt) and `maxRetries` let an interactive caller keep the
+ * whole read inside its own deadline: the defaults (15s × 3 with 1s/2s backoff)
+ * can spend ~48s on one unresponsive site. Throws an Error carrying
+ * `reason: UrlReadFailure`, plus `status` (Jina's) and `targetStatus` (the
+ * site's) when known.
+ */
+export async function readUrl(
+  targetUrl: string,
+  options: { timeoutMs?: number; maxRetries?: number } = {},
+): Promise<UrlReadResult> {
+  const headers = jinaHeaders();
   try {
-    return await withJinaRetry(() => fetchJinaContent(targetUrl, headers));
-  } catch (err: any) {
-    throw Object.assign(new Error(`Failed to extract URL: ${err.message}`), { statusCode: 500 });
+    return await withJinaRetry(
+      () => fetchJinaContent(targetUrl, headers, options.timeoutMs),
+      options.maxRetries,
+    );
+  } catch (err) {
+    const e = err as { status?: number; targetStatus?: number | null; message?: string };
+    throw Object.assign(new Error(`Failed to extract URL: ${e?.message ?? 'unknown error'}`), {
+      statusCode: 500,
+      reason: readFailure(err),
+      status: e?.status,
+      targetStatus: e?.targetStatus ?? null,
+    });
   }
+}
+
+export async function extractTextFromUrl(targetUrl: string): Promise<string> {
+  // Unchanged contract for its callers: the page text, or an Error with
+  // statusCode 500 (now also carrying readUrl's `reason`).
+  return (await readUrl(targetUrl)).content;
 }

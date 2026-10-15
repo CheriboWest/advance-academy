@@ -10,8 +10,7 @@
 
 /** A JD shorter than this is a title and a wish — fetch the posting instead. Same bar as coaching's context check. */
 export const JD_THIN_CHARS = 400;
-/** Below this there is nothing to write a letter against. */
-export const JD_MISSING_CHARS = 60;
+/** The minimum usable JD is `JD_MIN_CHARS` in ./jd.ts. */
 
 const MAX_CV_CHARS = 20_000;
 const MAX_JD_CHARS = 12_000;

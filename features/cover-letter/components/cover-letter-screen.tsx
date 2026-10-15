@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Check, Copy, FileSignature } from 'lucide-react'
 import { TERMINAL_SAVED_JOB_STATUSES } from '@advance-academy/contracts/job-tracking'
-import type { GenerateCoverLetterRequest } from '@advance-academy/contracts/cover-letter'
+import { isCoverLetterJdErrorCode, type GenerateCoverLetterRequest } from '@advance-academy/contracts/cover-letter'
+import { HttpClientError } from '@/shared/api/http-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,6 +24,14 @@ const PHASES: Array<[number, string]> = [
   [6000, 'Matching your CV to the requirements…'],
   [14000, 'Writing your letter…'],
 ]
+
+/** Codes after which the fix is "paste the job description": focus (or reveal) that box. */
+function wantsPastedJd(code: string | undefined): boolean {
+  return isCoverLetterJdErrorCode(code) || code === 'COVER_LETTER_TIMEOUT' || code === 'TIMEOUT'
+}
+
+const SLOW_MESSAGE =
+  'This took too long, usually because the job page was slow to load. Paste the job description into the Job description box and try again.'
 
 function phaseLabel(ms: number): string {
   let label = PHASES[0][1]
@@ -49,6 +58,10 @@ export function CoverLetterScreen() {
   const [companyName, setCompanyName] = useState(params?.get('company') ?? '')
   const [jobUrl, setJobUrl] = useState(params?.get('url') ?? '')
   const [jobDescription, setJobDescription] = useState('')
+  // A tracked job whose link can't be read: the student pastes its description here.
+  const [savedJobDescription, setSavedJobDescription] = useState('')
+  const [needsJd, setNeedsJd] = useState(false)
+  const jdBoxRef = useRef<HTMLTextAreaElement>(null)
   const [letter, setLetter] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -76,6 +89,11 @@ export function CoverLetterScreen() {
     Boolean(cvVersionId) &&
     (mode === 'saved' ? Boolean(savedJobId) : Boolean(jobTitle.trim() && (jobUrl.trim() || jobDescription.trim())))
 
+  // After a JD error, put the cursor where the fix goes.
+  useEffect(() => {
+    if (needsJd) jdBoxRef.current?.focus()
+  }, [needsJd, mode])
+
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canSubmit || busy) return
@@ -83,7 +101,7 @@ export function CoverLetterScreen() {
     setCopied(false)
     const body: GenerateCoverLetterRequest =
       mode === 'saved'
-        ? { cvVersionId, savedJobId }
+        ? { cvVersionId, savedJobId, jobDescription: savedJobDescription.trim() || undefined }
         : {
             cvVersionId,
             jobTitle: jobTitle.trim(),
@@ -98,7 +116,9 @@ export function CoverLetterScreen() {
       setLetter(res.coverLetter)
     } catch (err) {
       reset()
-      setError(err instanceof Error ? err.message : 'Could not write the cover letter.')
+      const code = err instanceof HttpClientError ? err.payload.code : undefined
+      setError(code === 'TIMEOUT' ? SLOW_MESSAGE : err instanceof Error ? err.message : 'Could not write the cover letter.')
+      if (wantsPastedJd(code)) setNeedsJd(true)
     }
   }
 
@@ -152,19 +172,40 @@ export function CoverLetterScreen() {
 
           {mode === 'saved' ? (
             savedJobs.length ? (
-              <select
-                aria-label="Saved job"
-                value={savedJobId}
-                onChange={(e) => setSavedJobId(e.target.value)}
-                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {savedJobs.map((j) => (
-                  <option key={j.id} value={j.id}>
-                    {j.title}
-                    {j.companyName ? ` — ${j.companyName}` : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-3">
+                <select
+                  aria-label="Saved job"
+                  value={savedJobId}
+                  onChange={(e) => {
+                    setSavedJobId(e.target.value)
+                    setSavedJobDescription('')
+                    setNeedsJd(false)
+                  }}
+                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {savedJobs.map((j) => (
+                    <option key={j.id} value={j.id}>
+                      {j.title}
+                      {j.companyName ? ` — ${j.companyName}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {needsJd || savedJobDescription ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cl-saved-jd">Job description</Label>
+                    <Textarea
+                      id="cl-saved-jd"
+                      ref={jdBoxRef}
+                      rows={6}
+                      value={savedJobDescription}
+                      onChange={(e) => setSavedJobDescription(e.target.value)}
+                      maxLength={20000}
+                      placeholder="Paste the job's full description: responsibilities and requirements."
+                    />
+                    <p className="text-xs text-muted-foreground">It is saved on this job, so other tools can use it too.</p>
+                  </div>
+                ) : null}
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground">
                 {jobsLoading ? 'Loading your jobs…' : 'No saved jobs yet — paste one instead, or save one from '}
@@ -209,6 +250,7 @@ export function CoverLetterScreen() {
                 <Label htmlFor="cl-jd">Job description</Label>
                 <Textarea
                   id="cl-jd"
+                  ref={jdBoxRef}
                   rows={6}
                   value={jobDescription}
                   onChange={(e) => setJobDescription(e.target.value)}
@@ -244,6 +286,11 @@ export function CoverLetterScreen() {
               {copied ? 'Copied' : 'Copy'}
             </Button>
           </div>
+          {generate.data?.notice ? (
+            <p role="status" className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              {generate.data.notice}
+            </p>
+          ) : null}
           <Textarea
             aria-label="Cover letter text"
             value={letter}
