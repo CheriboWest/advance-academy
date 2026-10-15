@@ -39,6 +39,10 @@ everything else is here. Data comes from **backend-python**, not Fastify.
 - Sponsored Companies pages server-side: backend-python `GET /sponsors/companies`
   → SQL `coach_company_page` (migration 048), licensed sponsors by default, with
   contact counts. Don't go back to loading every company into the page.
+- Bulk import (`/coach/contacts/import`, `lib/contact-import*.ts`,
+  `components/coach/contact-import-*.tsx`) is a thin client of backend-python's
+  wizard; the database decides every match (`backend-python/app/contacts_import/CLAUDE.md`).
+  The review only offers contact matches at the row's own company.
 - Contacts: coaches manage them via backend-python (`/contacts`); students on
   Membership see a reduced shape (no phone/notes) via Fastify on `/companies/[slug]`.
   `SECTOR_OPTIONS` in `lib/filters.ts` must match `backend-python/app/companies/sector.py`.

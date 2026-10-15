@@ -500,7 +500,17 @@ begin
     not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
                  where n.nspname = 'public' and p.prokind = 'f'
                    and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
-                   and p.oid::regprocedure::text not in (select sig from k_funcs union all select sig from k_existing)));
+                   and p.oid::regprocedure::text not in (select sig from k_funcs union all select sig from k_existing)
+                   -- Functions added by later migrations (each tests its own grants):
+                   -- 048 coach company page (checked just below), 049 contact importer.
+                   and p.proname not in ('coach_company_page',
+                                         'ci_norm_name', 'ci_norm_email', 'ci_norm_phone', 'ci_norm_linkedin', 'ci_norm_domain',
+                                         'ci_generic_domain', 'contact_import_classify', 'contact_import_commit',
+                                         'contact_import_merge_action')));
+  perform pg_temp.check('K4 048''s coach_company_page is service_role only',
+    has_function_privilege('service_role', 'public.coach_company_page(uuid, boolean, text, integer, integer)', 'EXECUTE')
+    and not has_function_privilege('anon', 'public.coach_company_page(uuid, boolean, text, integer, integer)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.coach_company_page(uuid, boolean, text, integer, integer)', 'EXECUTE'));
 
   perform pg_temp.check('K5 RLS is on for every public table',
     not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity));

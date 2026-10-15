@@ -20,6 +20,14 @@ Endpoint-by-endpoint reference (sponsor register, crawler, deletion) is `README.
   Membership get a reduced shape (no phone/notes) from Fastify
   `routes/company-contacts.ts`. The category (HR, recruiter…) is derived from
   `job_title` by `contactCategory` in `packages/contracts/src/contacts.ts`, never stored.
+- **Bulk contact import** (`/coach/contacts/import` → `routers/contact_imports.py`,
+  migration 049; full rules in `app/contacts_import/CLAUDE.md`): Python only parses
+  (`upload.py`) and maps (`mapping.py`, reusing `clean.py`/`rows.py`); matching and
+  the import are SQL (`contact_import_classify` / `contact_import_commit`, one
+  transaction) — don't re-implement matching here. A company matches only by exact
+  name or verified alias, never by website domain alone; uncertain matches go to an
+  admin; "create" never overrides an existing email/LinkedIn; fields are only filled
+  where empty. `openpyxl` in `requirements.txt` is for this wizard.
 - **Sectors**: `companies.sector` is written only by `app/companies/sector.py`
   (backfill `scripts/classify_sectors.py`). Its list must match `SECTOR_OPTIONS` in
   `features/career-hub/lib/filters.ts` — `test_sector.py` checks.

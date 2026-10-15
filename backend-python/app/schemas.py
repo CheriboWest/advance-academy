@@ -402,7 +402,10 @@ class Contact(BaseModel):
 class ContactCompany(BaseModel):
     id: str
     name: str
-    slug: str
+    # Nullable: companies.slug has no NOT NULL (migration 024 added it without a
+    # backfill), so older companies have none. Requiring it here turned one such
+    # contact into a 500 for the whole Contact Directory. Link by id, not slug.
+    slug: Optional[str] = None
 
 
 class DirectoryContact(Contact):

@@ -21,7 +21,7 @@ import type { Contact, ContactInput } from "@/features/career-hub/lib/types";
  * stringifies each element by calling its own toString, and a plain object
  * has none worth having. Handles both shapes explicitly instead.
  */
-function extractErrorDetail(data: unknown): string | null {
+export function extractErrorDetail(data: unknown): string | null {
   if (!data || typeof data !== "object" || !("detail" in data)) return null;
   const detail = (data as { detail?: unknown }).detail;
 

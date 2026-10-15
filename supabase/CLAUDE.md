@@ -49,12 +49,21 @@ Full design, privilege matrix and rollout: `git show 062d0e5:docs/GAMIFICATION_V
   an owner role (expect zero rows):
   `select r.rolname, g.rolname from pg_roles r, pg_roles g where g.rolname like 'gamification\_%' and r.rolname in ('anon','authenticated','service_role','authenticator') and pg_has_role(r.oid, g.oid, 'MEMBER');`
 
+## Contact import (migration 049)
+
+Rules and rollout: `backend-python/app/contacts_import/CLAUDE.md`. `company_aliases`
+(on `delete_companies_permanently`'s allowlist), `contact_import_batches` and
+`contact_import_rows` are service-role only; the staging tables keep company/contact
+ids **without** foreign keys so history outlives a deleted company. Matching goes
+through the immutable `ci_norm_*` normalizers and their expression indexes.
+
 ## SQL tests (`tests/`)
 
 - `PGHOST=127.0.0.1 PGPORT=<port> supabase/tests/run_local.sh` on a **scratch** local
   Postgres 16 + pgvector cluster: loads Supabase role stand-ins from `tests/support/`,
   applies every migration as non-superuser `postgres`, runs `046_*.test.sql`,
-  `047_*.test.sql` (each rolled back) and the two-session concurrency test.
+  `047_*.test.sql`, `049_*.test.sql` (each rolled back) and the two-session
+  concurrency tests.
   `MIGRATION_ROLE=supabase_admin` checks the superuser path (use a fresh cluster).
 - The test files refuse to run against a database whose `jobs` has rows. Never point
   them at production.

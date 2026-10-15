@@ -113,3 +113,87 @@ describe("contacts across companies", () => {
     expect(Math.max(...sizes)).toBeLessThanOrEqual(100);
   });
 });
+
+describe("getContactDirectory", () => {
+  const directoryRow = (id: string, company: { id: string; name: string; slug: string | null }) => ({
+    ...makeContact(id, company.id),
+    company,
+  });
+
+  function stubFetch(impl: () => Promise<Response>) {
+    const fetchMock = vi.fn(impl);
+    vi.stubGlobal("fetch", fetchMock);
+    process.env.BACKEND_PYTHON_URL = "http://fake-api.test";
+    return fetchMock;
+  }
+
+  it("lists a contact whose company has no slug", async () => {
+    stubFetch(async () =>
+      jsonResponse([
+        directoryRow("c1", { id: "co-1", name: "Acme", slug: "acme" }),
+        directoryRow("c2", { id: "co-2", name: "Hays", slug: null }),
+      ])
+    );
+    const { getContactDirectory } = await import("@/features/career-hub/lib/contacts");
+
+    const result = await getContactDirectory();
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.contacts.map((c) => c.company?.slug ?? null)).toEqual(["acme", null]);
+    // Temporary diagnostics: status and counts only, the rows themselves unchanged.
+    expect(result.diagnostics).toMatchObject({
+      request: "ok",
+      httpStatus: 200,
+      returnedCount: 2,
+      uniqueIdCount: 2,
+      targetContactPresent: false,
+    });
+  });
+
+  it("a failing API is an error to show, not an empty directory (the null-slug 500)", async () => {
+    stubFetch(async () => new Response("Internal Server Error", { status: 500 }));
+    const { getContactDirectory } = await import("@/features/career-hub/lib/contacts");
+
+    const result = await getContactDirectory();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("couldn't be loaded (HTTP 500)");
+      expect(result.error).toContain("backend-python");
+    }
+  });
+
+  it("explains an unreachable API, a refused session and a missing configuration", async () => {
+    stubFetch(async () => {
+      throw new TypeError("fetch failed");
+    });
+    let mod = await import("@/features/career-hub/lib/contacts");
+    expect(await mod.getContactDirectory()).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("didn't respond"),
+      diagnostics: { request: "failed", failureReason: "network", httpStatus: null },
+    });
+
+    vi.resetModules();
+    stubFetch(async () => new Response("{}", { status: 403 }));
+    mod = await import("@/features/career-hub/lib/contacts");
+    expect(await mod.getContactDirectory()).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("coach account"),
+      diagnostics: { request: "failed", failureReason: "http", httpStatus: 403 },
+    });
+
+    vi.resetModules();
+    delete process.env.BACKEND_PYTHON_URL;
+    mod = await import("@/features/career-hub/lib/contacts");
+    expect(await mod.getContactDirectory()).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("BACKEND_PYTHON_URL"),
+      diagnostics: { request: "failed", failureReason: "unconfigured" },
+    });
+  });
+
+  it("the per-company readers keep their never-throw empty list", async () => {
+    stubFetch(async () => new Response("Internal Server Error", { status: 500 }));
+    const { getContacts } = await import("@/features/career-hub/lib/contacts");
+    expect(await getContacts(ABSOLUTE_RECRUIT_ID)).toEqual([]);
+  });
+});
