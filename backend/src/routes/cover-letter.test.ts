@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { APIConnectionTimeoutError } from '@anthropic-ai/sdk';
+import { APIConnectionTimeoutError, APIError } from '@anthropic-ai/sdk';
 import { JdError } from '../lib/cover-letter/jd.js';
 import { coverLetterErrorResponse } from './cover-letter.js';
 
@@ -48,4 +48,51 @@ test('credits and 4xx service errors keep their existing shape', () => {
   assert.deepEqual(credits, { status: 429, body: { code: 'CREDIT_EXHAUSTED', message: 'Out of credits', scope: 'monthly' }, log: false });
   const notFound = coverLetterErrorResponse(Object.assign(new Error('That job is not in your tracker.'), { statusCode: 404 }));
   assert.deepEqual(notFound.body, { code: 'NOT_FOUND', message: 'That job is not in your tracker.' });
+});
+
+// The reported bug: a full JD pasted by hand still got "Could not write the cover
+// letter. Please try again." Reproduced against the real backend: Anthropic's
+// errors carry `status`, not `statusCode`, so every API error the route didn't
+// name fell through to that generic 500. Built the way the SDK builds them.
+const GENERIC = 'Could not write the cover letter. Please try again.';
+function anthropicError(status: number, type: string, message: string) {
+  return APIError.generate(status, { type: 'error', error: { type, message } }, undefined, new Headers({ 'request-id': 'req_test' }));
+}
+
+test('Anthropic 400 "credit balance too low" is LLM_REJECTED with a useful message, not the generic text', () => {
+  const r = coverLetterErrorResponse(
+    anthropicError(400, 'invalid_request_error', 'Your credit balance is too low to access the Anthropic API.'),
+  );
+  assert.equal(r.status, 502);
+  assert.equal(r.body.code, 'LLM_REJECTED');
+  assert.notEqual(r.body.message, GENERIC);
+  assert.match(r.body.message, /problem on our side, not with your CV or job description — no credit was used/);
+  assert.equal(r.log, true, 'the real cause must reach the server log');
+});
+
+test('Anthropic 404 (model not found) is LLM_REJECTED too', () => {
+  const r = coverLetterErrorResponse(anthropicError(404, 'not_found_error', 'model: claude-haiku-4-5'));
+  assert.equal(r.body.code, 'LLM_REJECTED');
+  assert.notEqual(r.body.message, GENERIC);
+});
+
+test('Anthropic 403 (key without access) is LLM_UNAVAILABLE', () => {
+  const r = coverLetterErrorResponse(anthropicError(403, 'permission_error', 'Your API key does not have permission.'));
+  assert.equal(r.status, 503);
+  assert.equal(r.body.code, 'LLM_UNAVAILABLE');
+});
+
+test('Anthropic overload keeps its own message (unchanged)', () => {
+  const r = coverLetterErrorResponse(anthropicError(529, 'overloaded_error', 'Overloaded'));
+  assert.deepEqual(r.body, { code: 'LLM_BUSY', message: 'The writing service is busy. Try again in a minute.' });
+});
+
+test('a failed save after the letter was written says so, and is logged', () => {
+  const err = Object.assign(new Error("Your letter was written but couldn't be saved, so no credit was used."), {
+    statusCode: 500,
+    code: 'COVER_LETTER_SAVE_FAILED',
+    expose: true,
+  });
+  const r = coverLetterErrorResponse(err);
+  assert.deepEqual(r, { status: 500, body: { code: 'COVER_LETTER_SAVE_FAILED', message: err.message }, log: true });
 });

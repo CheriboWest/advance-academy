@@ -232,3 +232,21 @@ describe('CoverLetterScreen — JD recovery panel', () => {
     expect(screen.queryByLabelText('Job description')).toBeNull()
   })
 })
+
+describe('CoverLetterScreen — writing-service failures with a pasted JD', () => {
+  it('shows the specific reason, not the generic message, and keeps the pasted JD', async () => {
+    state.params = new URLSearchParams({ cv: CV_ID, title: 'Data Analyst' })
+    const message =
+      'The writing service turned the request down. This is a problem on our side, not with your CV or job description — no credit was used. Please try again later.'
+    state.mutateAsync.mockRejectedValue(new HttpClientError(502, { code: 'LLM_REJECTED', message }))
+    render(<CoverLetterScreen />)
+    const jd = 'Responsibilities: build SQL dashboards. Requirements: SQL, Python. '.repeat(5)
+    fireEvent.change(screen.getByLabelText('Job description'), { target: { value: jd } })
+    await submit()
+
+    expect(screen.getByRole('alert').textContent).toBe(message)
+    expect(screen.queryByText(/couldn't read the job description automatically/)).toBeNull()
+    expect((screen.getByLabelText('Job description') as HTMLTextAreaElement).value).toBe(jd)
+    expect(state.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ jobDescription: jd.trim() }))
+  })
+})

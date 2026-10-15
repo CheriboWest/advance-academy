@@ -151,7 +151,11 @@ export async function generateCoverLetter(
     throw httpError(502, 'The letter came back empty. Please try again — no credit was used.', { code: 'LLM_FAILED', expose: true });
   }
 
-  await chargeAndSaveCoverLetter(userId, job.savedJobId, coverLetter, cv.id);
+  try {
+    await chargeAndSaveCoverLetter(userId, job.savedJobId, coverLetter, cv.id);
+  } catch (error) {
+    throw coverLetterSaveError(error);
+  }
 
   return {
     coverLetter,
@@ -160,6 +164,26 @@ export async function generateCoverLetter(
     savedJobId: job.savedJobId,
     notice: job.notice,
   };
+}
+
+/**
+ * What a failed charge-and-save tells the student. "Out of credits" and "not
+ * your card" already carry their own status and message; anything else is a
+ * database problem on our side (e.g. migration 047's charge_credits /
+ * record_cover_letter missing), which used to surface as the bare "Could not
+ * write the cover letter. Please try again." — after the letter had been
+ * written and paid for. The real cause goes to the log (no letter text).
+ */
+export function coverLetterSaveError(error: unknown): Error {
+  const e = error as { statusCode?: number; code?: string; message?: string } | null;
+  if (e?.statusCode && e.statusCode < 500) return error as Error;
+  console.error('[cover-letter] charge/save failed:', e?.code ?? 'UNKNOWN', e?.message ?? String(error));
+  return Object.assign(
+    new Error(
+      "Your letter was written but couldn't be saved, so no credit was used. This is a problem on our side, not with your CV or job description. Please try again later.",
+    ),
+    { statusCode: 500, code: 'COVER_LETTER_SAVE_FAILED', expose: true, cause: error },
+  );
 }
 
 /**
