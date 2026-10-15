@@ -11,8 +11,11 @@ see a reduced shape (no phone/notes) through Fastify
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -35,6 +38,27 @@ CONTACT_COLUMNS = (
 # counts per row) and the Outreach picker (a company's contacts) are the two
 # callers; neither needs more than a coach's whole company set at once.
 MAX_COMPANY_IDS_PER_LIST = 500
+
+
+def _supabase_target(settings: Settings) -> str:
+    """TEMPORARY, for diagnosing an empty Contact Directory: which Supabase
+    project this service reads, and what kind of key it reads with — the
+    project host and the key's role, never the key itself. A key without the
+    service role sees zero contacts (RLS, no policies) and still answers 200."""
+    host = urlparse(settings.supabase_url).hostname or "unset"
+    key = settings.supabase_service_role_key
+    if key.startswith("sb_secret_"):
+        kind = "secret"
+    elif key.startswith("sb_publishable_"):
+        kind = "publishable"
+    else:
+        try:
+            payload = key.split(".")[1]
+            role = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))).get("role")
+            kind = f"role={role}"
+        except (IndexError, ValueError, AttributeError):
+            kind = "unrecognised" if key else "missing"
+    return f"{host}, {kind} key"
 
 
 def _require_supabase(settings: Settings) -> SupabaseRest:
@@ -142,6 +166,8 @@ async def contact_directory(
             )
             rows.extend(page)
             if len(page) < DIRECTORY_PAGE:
+                # TEMPORARY diagnostic: a count and the project only, never contact data.
+                print(f"contacts.directory: {len(rows)} rows ({_supabase_target(get_settings())})", flush=True)
                 break
 
     rows.sort(key=lambda r: (((r.get("company") or {}).get("name") or "").lower(), r["full_name"].lower()))
