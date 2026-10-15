@@ -7,6 +7,7 @@ import {
   Flame,
   MapPin,
   TrendingUp,
+  TriangleAlert,
 } from "lucide-react";
 
 import { getDashboardData } from "@/features/career-hub/lib/coach";
@@ -26,10 +27,33 @@ export default async function CoachDashboardPage() {
   // backend (the sponsorship tables are service-role-only, so it cannot come
   // from the same Supabase reads), and awaiting it after the dashboard data
   // would put two independent waits in series on the first paint.
-  const [data, sponsorshipStats] = await Promise.all([
-    getDashboardData(),
+  //
+  // This is where coach sign-in lands, so a failed read must not take the
+  // page down: uncaught, it rendered Next's bare server-error screen and the
+  // whole workspace looked inaccessible (when migration 048 made
+  // public_company_summary unreadable to signed-in users).
+  const [dashboard, sponsorshipStats] = await Promise.all([
+    getDashboardData().then(
+      (data) => ({ ok: true as const, data }),
+      (error: unknown) => ({
+        ok: false as const,
+        message: error instanceof Error ? error.message : "An unexpected error occurred.",
+      })
+    ),
     getSponsorshipStats(),
   ]);
+
+  if (!dashboard.ok) {
+    console.error(`coach dashboard: ${dashboard.message}`);
+    return (
+      <EmptyState
+        icon={TriangleAlert}
+        title="We couldn't load the dashboard"
+        description={`${dashboard.message} The rest of the coach workspace is still available from the menu.`}
+      />
+    );
+  }
+  const { data } = dashboard;
 
   return (
     <div className="space-y-12">
