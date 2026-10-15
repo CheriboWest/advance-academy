@@ -139,6 +139,14 @@ describe("getContactDirectory", () => {
     const result = await getContactDirectory();
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.contacts.map((c) => c.company?.slug ?? null)).toEqual(["acme", null]);
+    // Temporary diagnostics: status and counts only, the rows themselves unchanged.
+    expect(result.diagnostics).toMatchObject({
+      request: "ok",
+      httpStatus: 200,
+      returnedCount: 2,
+      uniqueIdCount: 2,
+      targetContactPresent: false,
+    });
   });
 
   it("a failing API is an error to show, not an empty directory (the null-slug 500)", async () => {
@@ -158,17 +166,29 @@ describe("getContactDirectory", () => {
       throw new TypeError("fetch failed");
     });
     let mod = await import("@/features/career-hub/lib/contacts");
-    expect(await mod.getContactDirectory()).toEqual({ ok: false, error: expect.stringContaining("didn't respond") });
+    expect(await mod.getContactDirectory()).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("didn't respond"),
+      diagnostics: { request: "failed", failureReason: "network", httpStatus: null },
+    });
 
     vi.resetModules();
     stubFetch(async () => new Response("{}", { status: 403 }));
     mod = await import("@/features/career-hub/lib/contacts");
-    expect(await mod.getContactDirectory()).toEqual({ ok: false, error: expect.stringContaining("coach account") });
+    expect(await mod.getContactDirectory()).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("coach account"),
+      diagnostics: { request: "failed", failureReason: "http", httpStatus: 403 },
+    });
 
     vi.resetModules();
     delete process.env.BACKEND_PYTHON_URL;
     mod = await import("@/features/career-hub/lib/contacts");
-    expect(await mod.getContactDirectory()).toEqual({ ok: false, error: expect.stringContaining("BACKEND_PYTHON_URL") });
+    expect(await mod.getContactDirectory()).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("BACKEND_PYTHON_URL"),
+      diagnostics: { request: "failed", failureReason: "unconfigured" },
+    });
   });
 
   it("the per-company readers keep their never-throw empty list", async () => {

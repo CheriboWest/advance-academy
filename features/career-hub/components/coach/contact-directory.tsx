@@ -15,6 +15,11 @@ import { cn } from "@/shared/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/features/career-hub/components/empty-state";
+import { ContactDirectoryDiagnosticsPanel } from "@/features/career-hub/components/coach/contact-directory-diagnostics-panel";
+import {
+  DIAGNOSTIC_CONTACT_ID,
+  type ContactDirectoryDiagnostics,
+} from "@/features/career-hub/lib/contact-directory-diagnostics";
 
 type Filter = ContactCategory | "all";
 
@@ -23,7 +28,14 @@ type Filter = ContactCategory | "all";
  * contacts are hand-entered, so the whole set comes down in one request
  * (see GET /contacts/directory). Editing stays on each company's profile.
  */
-export function ContactDirectory({ contacts }: { contacts: DirectoryContact[] }) {
+export function ContactDirectory({
+  contacts,
+  diagnostics,
+}: {
+  contacts: DirectoryContact[];
+  /** TEMPORARY: passed only when CONTACTS_DEBUG_PANEL=1. */
+  diagnostics?: ContactDirectoryDiagnostics;
+}) {
   const [query, setQuery] = React.useState("");
   const [category, setCategory] = React.useState<Filter>("all");
 
@@ -56,17 +68,34 @@ export function ContactDirectory({ contacts }: { contacts: DirectoryContact[] })
     })),
   ];
 
+  const diagnosticsPanel = diagnostics && (
+    <ContactDirectoryDiagnosticsPanel
+      server={diagnostics}
+      filter={{
+        beforeFilter: rows.length,
+        afterFilter: filtered.length,
+        category,
+        queryLength: needle.length,
+        targetContactInView: filtered.some((row) => row.id === DIAGNOSTIC_CONTACT_ID),
+      }}
+    />
+  );
+
   if (contacts.length === 0) {
     return (
-      <EmptyState
-        title="No contacts yet"
-        description="Add contacts from a company's profile under Sponsored Companies, or import the contacts spreadsheet."
-      />
+      <>
+        {diagnosticsPanel}
+        <EmptyState
+          title="No contacts yet"
+          description="Add contacts from a company's profile under Sponsored Companies, or import the contacts spreadsheet."
+        />
+      </>
     );
   }
 
   return (
     <div className="space-y-4">
+      {diagnosticsPanel}
       <div className="relative max-w-md">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input

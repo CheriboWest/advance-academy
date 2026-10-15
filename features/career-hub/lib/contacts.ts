@@ -1,6 +1,10 @@
 import { createSupabaseServerClient } from "@/shared/auth/supabase-server";
 import { careerHubApiUrl } from "@/features/career-hub/lib/api-url";
 import type { Contact, DirectoryContact } from "@/features/career-hub/lib/types";
+import {
+  summarizeDirectoryRequest,
+  type ContactDirectoryDiagnostics,
+} from "@/features/career-hub/lib/contact-directory-diagnostics";
 
 /**
  * A company's contacts, or a batch across several, from the FastAPI backend
@@ -20,7 +24,7 @@ import type { Contact, DirectoryContact } from "@/features/career-hub/lib/types"
  * the Contact Directory reports the failure instead (getContactDirectory).
  */
 type ContactsRequest<T> =
-  | { ok: true; rows: T[] }
+  | { ok: true; status: number; rows: T[] }
   | { ok: false; reason: "unconfigured" | "no_session" | "network" }
   | { ok: false; reason: "http"; status: number };
 
@@ -43,7 +47,7 @@ async function requestContacts<T = Contact>(pathAndQuery: string): Promise<Conta
       }
     );
     if (!response.ok) return { ok: false, reason: "http", status: response.status };
-    return { ok: true, rows: (await response.json()) as T[] };
+    return { ok: true, status: response.status, rows: (await response.json()) as T[] };
   } catch {
     return { ok: false, reason: "network" };
   }
@@ -58,18 +62,28 @@ export async function getContacts(companyId: string): Promise<Contact[]> {
   return fetchContacts(`?company_id=${encodeURIComponent(companyId)}`);
 }
 
-export type ContactDirectoryResult =
+export type ContactDirectoryResult = (
   | { ok: true; contacts: DirectoryContact[] }
-  | { ok: false; error: string };
+  | { ok: false; error: string }
+) & {
+  /** TEMPORARY (37-vs-148 investigation): counts and status only, no contact
+   *  data. Rendered only when CONTACTS_DEBUG_PANEL=1 — see the contacts page. */
+  diagnostics: ContactDirectoryDiagnostics;
+};
 
 /** Every contact with its company — the coach Contact Directory. Unlike the
  *  readers above, a failure comes back as an error message for the page to
  *  show: this list *is* the page, so an empty one would claim there are no
  *  contacts. */
 export async function getContactDirectory(): Promise<ContactDirectoryResult> {
+  const startedAt = Date.now();
   const result = await requestContacts<DirectoryContact>("/directory");
-  if (result.ok) return { ok: true, contacts: result.rows };
-  return { ok: false, error: directoryErrorMessage(result) };
+  const durationMs = Date.now() - startedAt;
+  if (result.ok) {
+    return { ok: true, contacts: result.rows, diagnostics: summarizeDirectoryRequest(result, null, durationMs) };
+  }
+  const error = directoryErrorMessage(result);
+  return { ok: false, error, diagnostics: summarizeDirectoryRequest(result, error, durationMs) };
 }
 
 function directoryErrorMessage(result: Exclude<ContactsRequest<unknown>, { ok: true }>): string {
