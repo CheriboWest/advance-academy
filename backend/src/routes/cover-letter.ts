@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { APIConnectionTimeoutError, APIConnectionError, AuthenticationError } from '@anthropic-ai/sdk';
+import { APIConnectionTimeoutError, APIConnectionError, APIError, AuthenticationError } from '@anthropic-ai/sdk';
 import type { GenerateCoverLetterRequest } from '@advance-academy/contracts/cover-letter';
 import { assertCredits } from '../lib/credits.js';
 import { perUserDaily } from '../lib/rate-limit.js';
@@ -95,7 +95,8 @@ export function coverLetterErrorResponse(error: unknown): {
     return { status: 429, body: { code: e.code, message: e.message ?? '', scope: e.scope }, log: false };
   }
   if (e?.expose && e.code && e.message) {
-    return { status, body: { code: e.code, message: e.message }, log: false };
+    // A JD problem is the student's to fix; a 5xx here (a failed save) is ours, so log it.
+    return { status, body: { code: e.code, message: e.message }, log: status >= 500 && !e.code.startsWith('JD_') };
   }
   if (isOverloadedError(error)) {
     return { status: 503, body: { code: 'LLM_BUSY', message: 'The writing service is busy. Try again in a minute.' }, log: false };
@@ -112,6 +113,30 @@ export function coverLetterErrorResponse(error: unknown): {
     return {
       status: 503,
       body: { code: 'LLM_UNAVAILABLE', message: 'The writing service is unavailable right now. Try again later — no credit was used.' },
+      log: true,
+    };
+  }
+  // Any other answer from the AI API. These carry `status`, not `statusCode`,
+  // so they used to fall through to the generic 500 below: a 400 "credit
+  // balance is too low", a 404 retired model or a 403 key without access all
+  // read "Could not write the cover letter. Please try again." The student can't
+  // fix these, so say it's on our side; the log has Anthropic's own message.
+  if (error instanceof APIError) {
+    const s = error.status;
+    if (s === 401 || s === 403) {
+      return {
+        status: 503,
+        body: { code: 'LLM_UNAVAILABLE', message: 'The writing service is unavailable right now. Try again later — no credit was used.' },
+        log: true,
+      };
+    }
+    return {
+      status: 502,
+      body: {
+        code: 'LLM_REJECTED',
+        message:
+          'The writing service turned the request down. This is a problem on our side, not with your CV or job description — no credit was used. Please try again later.',
+      },
       log: true,
     };
   }

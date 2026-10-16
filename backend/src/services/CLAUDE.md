@@ -63,6 +63,8 @@
   (thin JD + link → `readUrl` + `extractJobFromMarkdown`, inside a time budget that fits the
   120s proxy): below `JD_MIN_CHARS` it throws a `JdError` with a `JD_*` code and a
   "paste the description" message — never write from scraps. Log the link's host only.
+  Anthropic SDK errors carry `status`, **not** `statusCode`: map them explicitly (see
+  `coverLetterErrorResponse` in routes/cover-letter.ts) or they become the generic 500.
 - Coach Understanding sends the CV with no size cap — mind token cost if inputs grow.
 
 ## Gamification (`gamification.service.ts`, `routes/gamification.ts`)

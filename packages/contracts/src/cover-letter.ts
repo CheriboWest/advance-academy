@@ -34,6 +34,9 @@ export interface GenerateCoverLetterResponse {
   notice?: string | null
 }
 
+/** The shortest job description a letter is written from (about 30 words). Shared so the screen's counter matches the backend. */
+export const COVER_LETTER_JD_MIN_CHARS = 200
+
 /**
  * Error `code`s for "there is no usable job description" — each comes with a
  * `message` that says how to recover (usually: paste the description). No
