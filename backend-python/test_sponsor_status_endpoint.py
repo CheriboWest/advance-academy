@@ -371,7 +371,26 @@ response = http_client.get("/sponsors/companies/does-not-exist")
 check("I: an unknown company id is a clean 404",
       response.status_code == 404, f"got {response.status_code}")
 
+# J — the public route students see: no token, licensed facts only.
 _anonymous()
+fixture_rest.companies.append({"id": "co-none", "name": "Nobody Ltd"})
+response = http_client.get("/sponsors/public/companies/co-http")
+body = response.json()
+check("J: the public route needs no session (200)",
+      response.status_code == 200, f"got {response.status_code}")
+check("J: a licensed company returns its match",
+      body["status"] == "licensed"
+      and body["match"]["organisation_name"] == "DGP Intelsius Ltd")
+check("J: coach-only fields are blanked",
+      body["candidate_count"] is None and body["register_import_id"] is None)
+response = http_client.get("/sponsors/public/companies/co-none")
+check("J: a company with no licence is null, not its triage state",
+      response.status_code == 200 and response.json() is None,
+      f"got {response.status_code} {response.text}")
+response = http_client.get("/sponsors/public/companies/does-not-exist")
+check("J: an unknown company is null",
+      response.status_code == 200 and response.json() is None,
+      f"got {response.status_code} {response.text}")
 
 
 print()

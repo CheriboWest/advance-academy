@@ -49,6 +49,31 @@ export async function getSponsorshipStatus(
 }
 
 /**
+ * The licence shown on the public company page (GET
+ * /sponsors/public/companies/{id}). Server-only, no token: the route only
+ * repeats the public GOV.UK register, and returns `null` unless the company
+ * is a licensed sponsor. Never throws — on any failure the page simply shows
+ * no sponsorship section.
+ */
+export async function getPublicSponsorship(
+  companyId: string
+): Promise<CompanySponsorshipStatus | null> {
+  const baseUrl = careerHubApiUrl();
+  if (!baseUrl) return null;
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/sponsors/public/companies/${encodeURIComponent(companyId)}`,
+      { cache: "no-store", signal: AbortSignal.timeout(5000) }
+    );
+    if (!response.ok) return null;
+    return (await response.json()) as CompanySponsorshipStatus | null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * How many companies hold a confirmed sponsor licence (GET /sponsors/stats),
  * for the coach dashboard's "Licensed sponsors" KPI. One count, not a row per
  * company — the dashboard has no use for the individual companies, and asking

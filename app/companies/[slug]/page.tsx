@@ -18,6 +18,8 @@ import { EmptyState } from "@/features/career-hub/components/empty-state";
 import { CompanySummary } from "@/features/career-hub/components/company-summary";
 import { CompanyContacts } from "@/features/career-hub/components/company-contacts";
 import { fetchContactSummary } from "@/features/career-hub/lib/company-contacts";
+import { getPublicSponsorship } from "@/features/career-hub/lib/sponsorship";
+import { Licensed } from "@/features/career-hub/components/coach/sponsorship-card";
 
 // Company and job data are fetched per request from Supabase.
 export const dynamic = "force-dynamic";
@@ -50,9 +52,10 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
     notFound();
   }
 
-  const [jobs, contactSummary] = await Promise.all([
+  const [jobs, contactSummary, sponsorship] = await Promise.all([
     fetchActiveJobs(company.id),
     fetchContactSummary(company.id),
+    getPublicSponsorship(company.id),
   ]);
   const location = company.hq_location ?? company.region ?? "—";
 
@@ -128,6 +131,13 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
             </div>
           )}
         </header>
+
+        {sponsorship && (
+          <section className="card-surface mt-6 space-y-1 p-6 sm:p-8">
+            <p className="label-caps text-muted-foreground">Visa sponsorship</p>
+            <Licensed status={sponsorship} showConfidence={false} />
+          </section>
+        )}
 
         {/* Open jobs */}
         <section className="mt-10">
