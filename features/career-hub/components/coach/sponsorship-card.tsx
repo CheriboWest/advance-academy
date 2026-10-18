@@ -130,7 +130,14 @@ function Body({ status }: { status: CompanySponsorshipStatus | null }) {
   }
 }
 
-function Licensed({ status }: { status: CompanySponsorshipStatus }) {
+/** Also rendered read-only on the public company page, without confidence. */
+export function Licensed({
+  status,
+  showConfidence = true,
+}: {
+  status: CompanySponsorshipStatus;
+  showConfidence?: boolean;
+}) {
   const match = status.match;
   if (!match) return null;
   const confidencePct = Math.round(match.confidence * 100);
@@ -167,8 +174,12 @@ function Licensed({ status }: { status: CompanySponsorshipStatus }) {
           </>
         )}
 
-        <dt className="text-muted-foreground">Match confidence</dt>
-        <dd>{confidencePct}%</dd>
+        {showConfidence && (
+          <>
+            <dt className="text-muted-foreground">Match confidence</dt>
+            <dd>{confidencePct}%</dd>
+          </>
+        )}
 
         <dt className="text-muted-foreground">Checked</dt>
         <dd>{formatDate(status.checked_at)}</dd>

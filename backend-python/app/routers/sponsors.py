@@ -1,12 +1,15 @@
 """Sponsor-register ingestion and entity-resolution endpoints.
 
-Both are coach-authenticated and run server-side with the service role key: the
-register is shared reference data, and the browser has no business writing it.
+All coach-authenticated except GET /sponsors/public/companies/{id}, the read-only
+licence shown on the public company page. Everything runs server-side with the
+service role key: the register is shared reference data, and the browser has no
+business writing it.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -359,6 +362,35 @@ async def get_company_sponsorship_status(
         status = await company_sponsorship_status(client, rest, company_id)
 
     return CompanySponsorshipStatus(**status)
+
+
+@router.get(
+    "/public/companies/{company_id}",
+    response_model=Optional[CompanySponsorshipStatus],
+)
+async def get_public_company_sponsorship(
+    company_id: str,
+) -> Optional[CompanySponsorshipStatus]:
+    """The licence a student sees on the public company page — no token.
+
+    The one unauthenticated route here, and safe because it only repeats the
+    public GOV.UK register: a `licensed` status with its match, or `null` for
+    every other state (and for an unknown company). Ambiguous / no_match /
+    not_checked are coach triage, so they never leave this route.
+    """
+    settings = get_settings()
+    rest = _require_supabase(settings)
+
+    async with httpx.AsyncClient() as client:
+        if await load_company(client, rest, company_id) is None:
+            return None
+        status = await company_sponsorship_status(client, rest, company_id)
+
+    if status["status"] != "licensed":
+        return None
+    return CompanySponsorshipStatus(
+        **{**status, "candidate_count": None, "register_import_id": None}
+    )
 
 
 @router.post("/companies/{company_id}/recheck", response_model=CompanySponsorshipStatus)
