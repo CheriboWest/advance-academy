@@ -46,7 +46,15 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     }
 
     try {
-      await createTrialAndSendMagicLink(body.email as string, str(body.name), str(body.ref));
+      const { emailSent } = await createTrialAndSendMagicLink(body.email as string, str(body.name), str(body.ref));
+      if (!emailSent) {
+        // Usually Supabase's mailer rate limit. Saying "check your inbox" here
+        // left students waiting for an email that was never sent.
+        return reply.code(503).send({
+          code: 'EMAIL_NOT_SENT',
+          message: 'We could not send your login link right now. Please wait a few minutes and try again.',
+        });
+      }
       return reply.code(200).send({ ok: true });
     } catch (error) {
       request.log.error(error);

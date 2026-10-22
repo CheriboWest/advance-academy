@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/features/auth/context/AuthContext'
 import { takeNextPath } from '@/shared/auth/next-path'
+import { getSupabaseBrowser } from '@/shared/auth/supabase-browser'
 
 // Magic-link landing (CA-001, P2/2a). Supabase redirects here with the session
 // tokens in the URL hash; the browser client (detectSessionInUrl) picks them up
@@ -24,6 +25,20 @@ export default function AuthCallbackPage() {
     // Supabase reports failures as `#error=...` in the hash.
     if (typeof window !== 'undefined' && window.location.hash.includes('error')) {
       setFailed(true)
+      return
+    }
+    // The magic link is minted server-side (passwordless.service.ts), so it uses
+    // the implicit flow and lands with `#access_token=…`. Our browser client is
+    // PKCE (@supabase/ssr) and refuses to read an implicit hash on its own, so we
+    // hand the tokens over ourselves.
+    const hash = new URLSearchParams(window.location.hash.slice(1))
+    const access_token = hash.get('access_token')
+    const refresh_token = hash.get('refresh_token')
+    if (!session && access_token && refresh_token) {
+      window.history.replaceState(null, '', window.location.pathname)
+      void getSupabaseBrowser()
+        .auth.setSession({ access_token, refresh_token })
+        .then(({ error }) => { if (error) setFailed(true) })
       return
     }
     if (session) {
