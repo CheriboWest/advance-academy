@@ -11,8 +11,8 @@ export interface CvOptimizerFeatures {
 }
 
 export function getCvOptimizerFeatures(): CvOptimizerFeatures {
-  // Default off: anything other than the exact string "true" is false.
+  // Default on: only the exact string "false" falls back to the monolith.
   return {
-    useV2: process.env.CV_OPTIMIZER_USE_V2?.trim().toLowerCase() === 'true',
+    useV2: process.env.CV_OPTIMIZER_USE_V2?.trim().toLowerCase() !== 'false',
   };
 }

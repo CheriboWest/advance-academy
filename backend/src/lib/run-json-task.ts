@@ -17,6 +17,7 @@
  */
 import type Anthropic from '@anthropic-ai/sdk';
 import { withRetry } from './llm-anthropic.js';
+import { extractJsonObject } from './coaching/json.js';
 
 export interface RunJsonTaskOptions {
   /** Caller-constructed Anthropic client — the helper never creates one. */
@@ -35,9 +36,9 @@ export interface RunJsonTaskOptions {
   retry?: boolean;
 }
 
-/** Strip a single leading/trailing ```json … ``` fence, if present. */
+/** The JSON object in the reply, dropping fences and any prose around them. */
 function stripJsonFences(raw: string): string {
-  return raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  return extractJsonObject(raw) ?? raw.trim();
 }
 
 /**
