@@ -27,6 +27,7 @@ import { getLlmConfig } from '../config/llm.js';
 import { getCvOptimizerFeatures } from '../config/features.js';
 import { assertLlmConfigured, createAnthropicClient, getFeatureModel } from '../lib/llm-anthropic.js';
 import { CV_LLM_CLIENT_OPTIONS } from './cv-agents/models.js';
+import { extractJsonObject } from '../lib/coaching/json.js';
 import { getSupabase, isMissingColumnError } from '../lib/supabase.js';
 import { ensureCvVersion } from '../lib/cv-version-link.js';
 import { recordToolResult } from './tool-results.service.js';
@@ -618,8 +619,10 @@ export function computeCompositeScore(
 
 // ─── LLM analysis ─────────────────────────────────────────────────────────────
 
+// Not just fence-stripping: the model sometimes closes the fence and adds a note
+// after it, which a fence regex leaves in place and JSON.parse rejects.
 function stripJsonFences(raw: string): string {
-  return raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  return extractJsonObject(raw) ?? raw.trim();
 }
 
 function safeArray<T>(val: unknown, fallback: T[] = []): T[] {
@@ -742,7 +745,9 @@ async function buildLlmAnalysis(body: AnalyzeCvRequest): Promise<AnalyzeCvResult
   console.log('🐘 Using Monolith');
   assertLlmConfigured('cvOptimizer');
 
-  const anthropic = createAnthropicClient('cvOptimizer');
+  // ponytail: 5 min, no retry — a stuck call fails with its own error before the
+  // 10-min reaper. CV_LLM_CLIENT_OPTIONS' 120s would cut legit 16k-token runs.
+  const anthropic = createAnthropicClient('cvOptimizer', { timeoutMs: 300_000, maxRetries: 0 });
   const model = getFeatureModel('cvOptimizer');
 
   // Few-shot references (hardcoded role-family library — no RAG, no retrieval).

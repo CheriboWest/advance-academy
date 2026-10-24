@@ -1,7 +1,7 @@
 # cv-agents — CV Optimizer V2 pipeline
 
-- Live when `CV_OPTIMIZER_USE_V2=true` (`config/features.ts`); otherwise
-  `cv-optimizer.service.ts` runs the monolith `buildLlmAnalysis`. Entry:
+- Live by default; `CV_OPTIMIZER_USE_V2=false` (`config/features.ts`) makes
+  `cv-optimizer.service.ts` run the monolith `buildLlmAnalysis`. Entry:
   `build-llm-analysis-v2.ts`. All branches use Haiku (`models.ts`).
 - Structure, keywords, ATS (two chained calls) and alignment fan out in parallel.
   **Bullets** is the slowest branch, so the CV is split into ≤4 parts evaluated in

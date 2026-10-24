@@ -29,6 +29,10 @@ test('trailing commentary after the object is dropped', () => {
   assert.deepEqual(extractJsonObject(BRIEF + '\n\nLet me know if you need more.'), BRIEF);
 });
 
+test('a closed fence followed by a note is dropped', () => {
+  assert.deepEqual(extractJsonObject('```json\n' + BRIEF + '\n```\n\nNote: scores are strict.'), BRIEF);
+});
+
 test('prose on both sides is dropped', () => {
   assert.deepEqual(extractJsonObject('Sure!\n' + BRIEF + '\nHope that helps.'), BRIEF);
 });
