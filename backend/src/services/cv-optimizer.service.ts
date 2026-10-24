@@ -858,14 +858,15 @@ async function analyzeCv(body: AnalyzeCvRequest): Promise<AnalyzeCvResult> {
     return buildFallbackAnalysis(body);
   }
 
-  try {
-    const result = await buildLlmAnalysis(body);
-    if (result) return result;
-  } catch (error) {
-    console.error('Falling back to local CV analysis after LLM error.', error);
-  }
-
-  return buildFallbackAnalysis(body);
+  // A failed LLM run fails the job (runCvAnalysisJob marks it `failed`, the UI
+  // offers a retry) instead of returning buildFallbackAnalysis(), whose canned
+  // scores and "LLM not configured" message would be wrong here.
+  const result = await buildLlmAnalysis(body).catch((error) => {
+    console.error('CV analysis LLM call failed.', error);
+    throw error;
+  });
+  if (!result) throw new Error('The AI analysis returned an unusable response. Please try again.');
+  return result;
 }
 
 /**
