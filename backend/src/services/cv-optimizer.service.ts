@@ -249,7 +249,7 @@ async function extractAtsKeywords(
 
   const response = await anthropic.messages.create({
     model,
-    max_tokens: 2048,
+    max_tokens: 4096, // 2048 truncated the JSON on long JDs (~6.5k chars of keywords)
     system: `${todayInstruction()}\n\n${ATS_KEYWORD_EXTRACTION_PROMPT}`,
     messages: [{
       role: 'user',
